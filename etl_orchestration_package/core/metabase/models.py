@@ -1,18 +1,21 @@
+import os
+
 from datetime import datetime
+
+from sqlalchemy.ext.declarative import declarative_base
 
 from sqlalchemy import Column, ForeignKey
 from sqlalchemy.dialects.postgresql import BIGINT, TIMESTAMP, VARCHAR, SMALLINT, DATE, JSONB
 from sqlalchemy.orm import relationship, validates
 
-from settings import SCHEMA_NAME
-from .base import Base
+Base = declarative_base()
 
 
 class SchemaBase:
     """
     Общий класс для определения схемы
     """
-    __table_args__ = {'schema': SCHEMA_NAME}
+    __table_args__ = {'schema': os.getenv('SCHEMA_NAME', 'public')}
 
 
 class Service(Base, SchemaBase):
@@ -30,7 +33,7 @@ class Process(Base, SchemaBase):
 
     id = Column(BIGINT, primary_key=True)
     create_ts = Column(TIMESTAMP, nullable=False, default=datetime.now)
-    service_id = Column(BIGINT, ForeignKey(f'{SCHEMA_NAME}.service.id'))
+    service_id = Column(BIGINT, ForeignKey(f'{SchemaBase.__table_args__.get("schema")}.service.id'))
     uid = Column(VARCHAR(128), unique=True, nullable=False)
 
     service = relationship('Service', back_populates='processes')
@@ -42,7 +45,7 @@ class Task(Base, SchemaBase):
 
     id = Column(BIGINT, primary_key=True)
     create_ts = Column(TIMESTAMP, nullable=False, default=datetime.now)
-    process_id = Column(BIGINT, ForeignKey(f'{SCHEMA_NAME}.process.id'))
+    process_id = Column(BIGINT, ForeignKey(f'{SchemaBase.__table_args__.get("schema")}.process.id'))
     config_template = Column(JSONB, nullable=False)
 
     process = relationship('Process', back_populates='tasks')
@@ -64,8 +67,8 @@ class TaskRun(Base, SchemaBase):
 
     id = Column(BIGINT, primary_key=True)
     create_ts = Column(TIMESTAMP, nullable=False, default=datetime.now)
-    task_id = Column(BIGINT, ForeignKey(f'{SCHEMA_NAME}.task.id'))
-    status_id = Column(SMALLINT, ForeignKey(f'{SCHEMA_NAME}.task_run_status.id'))
+    task_id = Column(BIGINT, ForeignKey(f'{SchemaBase.__table_args__.get("schema")}.task.id'))
+    status_id = Column(SMALLINT, ForeignKey(f'{SchemaBase.__table_args__.get("schema")}.task_run_status.id'))
     config = Column(JSONB, nullable=False)
     result = Column(VARCHAR(256), nullable=False)
     created_at = Column(TIMESTAMP, nullable=False, default=datetime.now)
@@ -80,8 +83,8 @@ class Chain(Base, SchemaBase):
 
     id = Column(BIGINT, primary_key=True)
     create_ts = Column(TIMESTAMP, nullable=False, default=datetime.now)
-    previous_task_id = Column(BIGINT, ForeignKey(f'{SCHEMA_NAME}.task.id'))
-    next_task_id = Column(BIGINT, ForeignKey(f'{SCHEMA_NAME}.task.id'))
+    previous_task_id = Column(BIGINT, ForeignKey(f'{SchemaBase.__table_args__.get("schema")}.task.id'))
+    next_task_id = Column(BIGINT, ForeignKey(f'{SchemaBase.__table_args__.get("schema")}.task.id'))
 
     previous_task = relationship('Task')
     next_task = relationship('Task')
@@ -105,5 +108,5 @@ class GraphChain(Base, SchemaBase):
 
     id = Column(BIGINT, primary_key=True)
     create_ts = Column(TIMESTAMP, nullable=False, default=datetime.now)
-    graph_id = Column(BIGINT, ForeignKey(f'{SCHEMA_NAME}.graph.id'))
-    chain_id = Column(BIGINT, ForeignKey(f'{SCHEMA_NAME}.chain.id'))
+    graph_id = Column(BIGINT, ForeignKey(f'{SchemaBase.__table_args__.get("schema")}.graph.id'))
+    chain_id = Column(BIGINT, ForeignKey(f'{SchemaBase.__table_args__.get("schema")}.chain.id'))

@@ -8,8 +8,19 @@ from sqlalchemy.ext.asyncio import create_async_engine
 parent_dir = os.path.abspath(os.path.join(os.getcwd()))
 sys.path.append(parent_dir)
 
-from db.base import SQLALCHEMY_DATABASE_URL
-from db.sqlalchemy_models import Base
+from core.metabase import create_metabase, get_metabase
+from core.metabase.models import Base
+
+create_metabase(
+    metabase_id='default',
+    metabase_type=os.getenv('DB_TYPE', 'pg'),
+    host=os.getenv('DB_HOST', 's001cd-db-dev01.dev002.local'),
+    port=os.getenv('DB_PORT', 5432),
+    username=os.getenv('DB_USER', 'a001_orchestration_tech_user'),
+    password=os.getenv('DB_PASSWORD', 'usrofa001_orchestration_tech_user'),
+    database=os.getenv('DB_NAME', 'orchestration')
+)
+
 
 
 target_metadata = Base.metadata
@@ -34,9 +45,10 @@ async def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = create_async_engine(SQLALCHEMY_DATABASE_URL)
+    connectable = create_async_engine(get_metabase().get_sqlalchemy_db_url())
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
+
 
 asyncio.run(run_migrations_online())
