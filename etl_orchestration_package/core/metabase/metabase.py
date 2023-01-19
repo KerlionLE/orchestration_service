@@ -1,4 +1,3 @@
-# import logging
 from typing import AsyncGenerator
 
 from sqlalchemy.orm import sessionmaker
@@ -33,30 +32,20 @@ class Metabase:
             echo=True
         )
 
-    # def get_session_factory(self, session_id=0, **db_config):
-    #     if session_id not in self.sessions:
-    #         self.sessions[session_id] = sessionmaker(
-    #             self.get_engine(**db_config),
-    #             autoflush=False,
-    #             expire_on_commit=False,
-    #             class_=AsyncSession
-    #         )
-    #     return self.sessions.get(session_id)
+    def get_session_factory(self, session_id=0, **db_config):
+        if session_id not in self.sessions:
+            self.sessions[session_id] = sessionmaker(
+                self.get_engine(**db_config),
+                autoflush=False,
+                expire_on_commit=False,
+                class_=AsyncSession
+            )
+        return self.sessions.get(session_id)
 
-    def get_session_factory(self, **db_config):
-        return sessionmaker(
-            self.get_engine(**db_config),
-            autoflush=False,
-            expire_on_commit=False,
-            class_=AsyncSession
-        )
-
-    async def get_db(self, **db_config):
+    async def get_db(self, **db_config) -> AsyncGenerator:
         factory = self.get_session_factory(**db_config)
         async with factory() as session:
-            # logger.debug(f"ASYNC Pool: {engine.pool.status()}")
             yield session
-            # pass
 
 
 class PGMetabase(Metabase):

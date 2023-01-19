@@ -11,17 +11,17 @@ sys.path.append(parent_dir)
 from core.metabase import create_metabase, get_metabase
 from core.metabase.models import Base
 
+from settings import DB_TYPE, DB_NAME, DB_HOST, DB_PORT, DB_USER, DB_PASSWORD
+
 create_metabase(
     metabase_id='default',
-    metabase_type=os.getenv('DB_TYPE', 'pg'),
-    host=os.getenv('DB_HOST', 's001cd-db-dev01.dev002.local'),
-    port=os.getenv('DB_PORT', 5432),
-    username=os.getenv('DB_USER', 'a001_orchestration_tech_user'),
-    password=os.getenv('DB_PASSWORD', 'usrofa001_orchestration_tech_user'),
-    database=os.getenv('DB_NAME', 'orchestration')
+    metabase_type=DB_TYPE,
+    host=DB_HOST,
+    port=DB_PORT,
+    username=DB_USER,
+    password=DB_PASSWORD,
+    database=DB_NAME
 )
-
-
 
 target_metadata = Base.metadata
 

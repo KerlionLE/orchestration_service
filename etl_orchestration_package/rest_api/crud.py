@@ -1,9 +1,7 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter
 
 from .models import ServiceInfo, CreatedObjectResponse
 
-# from core.metabase import get_metabase
 from core.metabase import get_metabase
 from core.metabase.models import Service
 from core.metabase.utils import insert_data
