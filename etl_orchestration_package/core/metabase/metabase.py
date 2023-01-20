@@ -48,7 +48,8 @@ class Metabase:
             self.get_engine(**db_config),
             autoflush=False,
             expire_on_commit=False,
-            class_=AsyncSession
+            class_=AsyncSession,
+            autocommit=False
         )
 
     async def get_db(self, **db_config):
