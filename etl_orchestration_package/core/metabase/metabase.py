@@ -1,8 +1,10 @@
+from asyncio import current_task
+
 from typing import AsyncGenerator
 
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine import URL
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_scoped_session
 
 
 class Metabase:
@@ -32,20 +34,17 @@ class Metabase:
             echo=True
         )
 
-    def get_session_factory(self, session_id=0, **db_config):
-        if session_id not in self.sessions:
-            self.sessions[session_id] = sessionmaker(
-                self.get_engine(**db_config),
-                autoflush=False,
-                expire_on_commit=False,
-                class_=AsyncSession
-            )
-        return self.sessions.get(session_id)
+    def get_session_factory(self, **db_config):
+        return sessionmaker(
+            self.get_engine(**db_config),
+            autoflush=False,
+            expire_on_commit=False,
+            class_=AsyncSession
+        )
 
     async def get_db(self, **db_config) -> AsyncGenerator:
         factory = self.get_session_factory(**db_config)
-        async with factory() as session:
-            yield session
+        yield async_scoped_session(factory, scopefunc=current_task)
 
 
 class PGMetabase(Metabase):

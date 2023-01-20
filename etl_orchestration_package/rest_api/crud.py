@@ -1,14 +1,12 @@
+from typing import List
+
 from fastapi import APIRouter
 
 from .models import ServiceInfo, CreatedObjectResponse, ProcessInfo, TaskInfo, TaskRunStatusInfo, TaskRunInfo, ChainInfo
 
-# from core.metabase import get_metabase
-# from core.metabase.models import Service
-# from core.metabase.utils import insert_data
-from ..core.metabase import get_metabase
-from ..core.metabase.models import Service, Process, Task, TaskRunStatus, TaskRun, Chain
-from ..core.metabase.utils import insert_data, read_one, read_all
-from ..settings import DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME
+from core.metabase import get_metabase
+from core.metabase.models import Service, Process, Task, TaskRunStatus, TaskRun, Chain
+from core.metabase.utils import insert_data, read_one, read_all
 
 crud_router = APIRouter(prefix="/api/v1")
 
@@ -18,39 +16,8 @@ crud_router = APIRouter(prefix="/api/v1")
 # =====================================================================================================================
 
 
-SQLALCHEMY_DATABASE_URL = URL.create(
-    drivername='postgresql+asyncpg',
-    username=DB_USER,
-    password=DB_PASSWORD,
-    host=DB_HOST,
-    port=DB_PORT,
-    database=DB_NAME,
-)
-
-# METADATA = MetaData(schema=SCHEMA_NAME)
-
-# engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=True)
-#
-#
-# AsyncSessionFactory = sessionmaker(
-#     engine,
-#     autoflush=False,
-#     expire_on_commit=False,
-#     class_=AsyncSession
-# )
-#
-#
-# async def get_db() -> AsyncGenerator:
-#     async with AsyncSessionFactory() as session:
-#         logger.debug(f"ASYNC Pool: {engine.pool.status()}")
-#         yield session
-
-
 @crud_router.post('/services', status_code=201)
-async def create_service(
-        service_info: ServiceInfo,
-        # async_session: AsyncSession = Depends(get_db),
-) -> CreatedObjectResponse:
+async def create_service(service_info: ServiceInfo) -> CreatedObjectResponse:
     async_session = await get_metabase().get_db().__anext__()
     service_id = await insert_data(async_session, Service, service_info)
 
