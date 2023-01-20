@@ -14,7 +14,7 @@ def create_metabase(metabase_id, metabase_type, **db_config):
 
     if metabase_id not in METABASE_DICT:
         METABASE_DICT[metabase_id] = metabase_cls(**db_config)
-        return metabase_cls(**db_config)
+        return METABASE_DICT[metabase_id]
     raise Exception(f"METABASE WITH ID '{metabase_id}' ALREADY EXISTS!!!")
 
 

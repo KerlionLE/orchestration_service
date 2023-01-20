@@ -106,6 +106,10 @@ graph_run
 _id graph_id created_dt updated_dt status
   1       ..        ...        ...    ... Нужен демон, который будет ставить статусы FAILED для незавершившихся run
 
+GraphRunTaskRun
+graph_run_id task_run_id
+           1           1
+           1           2
 
 
 
