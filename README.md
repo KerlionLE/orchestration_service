@@ -30,8 +30,8 @@
 		- Chain (Звено цепочки задач):
 			- id (int/sequence)
 			- previous_task (int) - FK на Task
-			- next_task (int) - FK на Task # нужно будет добавить проверку что previous и next не могут быть одинаковыми
-			- # что если зависим от нескольких previous_task?
+			- next_task (int) - FK на Task нужно будет добавить проверку что previous и next не могут быть одинаковыми
+			- что если зависим от нескольких previous_task?
 		- Graph
 			- id
 			- created_dt
@@ -65,3 +65,48 @@
 6. Airflow
 	- Создать даг который будет слушать топики kafka и тригерить другие даги в соответсвии с теми сообщениеми который получил
 	- Создать даг для переклди данных с STG на ODS
+
+
+---
+
+
+
+
+6 -> 7 -> [8, 9]
+
+
+
+1 -> 2
+[1, 5] -> 3
+1 -> 4
+
+chain
+_id prv nxt
+  1   1   2
+  2   1   3
+  3   1   4
+  4   5   3
+  5   6   7
+  6   7   8
+  7   7   9
+
+graph (integration)
+_id name
+  1  ...
+
+graph_chain
+graph chain
+    1     1
+    1     2
+    1     3
+    1     4
+    2     1 (ошибка - нужна проверка)
+
+graph_run
+_id graph_id created_dt updated_dt status
+  1       ..        ...        ...    ... Нужен демон, который будет ставить статусы FAILED для незавершившихся run
+
+
+
+
+4 -> 6
