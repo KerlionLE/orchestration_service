@@ -32,17 +32,47 @@
 #         ) for chain in chains
 #     ]  # в списке могут быть None
 
-def create_graph():
+def create_new_graph(task_id):
     """
-    Строим граф тасков по task_id
-    0. Получаем какой-то task_id
-    1. Получаем все Chain у которых previous_task = task_id
-    2. Получаем все Graph (из GraphChain) у которых chain = chain_id
-    3. Получаем все Chain (из GraphChain) у которых graph = graph_id
-    4. Строим словарь зависимостей -> {next_task_id: [previous_task_id1, previous_task_id2, ...]}
+    НУЖНО ПОСТОРИТЬ СЛОВАРЬ ЗАВИСИМОСТЕЙ С ИСПОЛЬЗОВААНИЕМ TASKRUN_ID И С НИМ РАБОТАТЬ
 
+
+    Строим граф тасков по task_id
+    0. Создаем TaskRun с указанным task_id и статусом SUCCEED
+    1. Получаем все Chain у которых previous_task = task_id
+    2. Получаем Graph (один!) (из GraphChain) у которых chain = chain_id
+    3. Проверяем существует ли GraphRun с таким graph_id и статусом RUNNING
+        Если существует:
+            3.1. Получаем из GraphRunTaskRun все task_run_id
+            3.2. Строим словарь зависимостей (???)
+        Если НЕ существует:
+            3.1. Создаем GraphRun со статусом CREATED (c указанием полученного graph_id)
+            3.2. Получаем все Chain (из GraphChain) у которых graph = graph_id
+            3.3. Строим словарь зависимостей -> {next_task_id: [previous_task_id1, previous_task_id2, ...]}
+            3.4. Создаем TaskRun'ы со статусом CREATED (по всем next_task_id у )
+            3.5. Получаем все TaskRun'ы у которых
+    4.
     """
     pass
+
+
+# Пример сообщений
+# msg = {
+#     'metadata': {
+#         'task_id': 1
+#     },
+#     'config': {},
+#     'result': {}
+# }
+#
+# msg = {
+#     'metadata': {
+#         'graphrun_id': 1,
+#         'taskrun_id': 1
+#     },
+#     'config': {},
+#     'result': {}
+# }
 
 # ---------------------------------------------------------------------
 
