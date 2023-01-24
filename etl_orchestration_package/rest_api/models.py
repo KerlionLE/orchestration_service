@@ -40,8 +40,6 @@ class TaskRunInfo(BaseModel):
     status_id: int
     config: Dict[str, Any]
     result: str
-    created_at: Optional[datetime]
-    updated_at: Optional[datetime]
 
 
 class ChainInfo(BaseModel):
@@ -52,13 +50,40 @@ class ChainInfo(BaseModel):
 
 class GraphInfo(BaseModel):
     id: Optional[int]
-    create_ts: datetime
+    create_ts: Optional[datetime]
+    name: str
 
 
 class GraphChainInfo(BaseModel):
     id: Optional[int]
     graph_id: int
     chain_id: int
+
+
+class GraphRunInfo(BaseModel):
+    id: Optional[int]
+    created_ts: Optional[datetime]
+    updated_ts: Optional[datetime]
+    graph_id: int
+    status_id: int
+    config: Dict[str, Any]
+    result: Dict[str, Any]
+
+
+class TaskUpdateValue(BaseModel):
+    config_template: Dict[str, Any]
+
+
+class TaskRunUpdateValue(BaseModel):
+    status_id: Optional[int]
+    config: Optional[Dict[str, Any]]
+    result: Optional[str]
+
+
+class GraphRunUpdateValue(BaseModel):
+    status_id: Optional[int]
+    config: Optional[Dict[str, Any]]
+    result: Optional[Dict[str, Any]]
 
 
 # ======================================================================================================================

@@ -34,5 +34,5 @@ class Queue:
     def consume_data(self, consumer_id):
         pass
 
-    def send_message(self, producer_id):
+    def send_message(self, producer_id, message):
         pass

@@ -1,10 +1,10 @@
 import traceback
 from datetime import datetime
-from typing import Dict, Any, Union, List
+from typing import Dict, Any, Union, List, Optional
 
 from loguru import logger
 from pydantic import BaseModel
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,7 +48,7 @@ async def read_one(
         async_session: AsyncSession,
         sa_model: DeclarativeMeta,
         object_id: int,
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     select_query = select(
         sa_model,
     ).where(
@@ -58,6 +58,8 @@ async def read_one(
     query_result = await execute_query(async_session, select_query)
 
     instance = query_result.scalars().first()
+    if not instance:
+        return
 
     return instance.to_dict()
 
@@ -78,8 +80,24 @@ async def read_all(
 
 
 @logger.catch(reraise=True)
-async def update_data():
-    pass
+async def update_data(
+        async_session: AsyncSession,
+        sa_model: DeclarativeMeta,
+        object_id: int,
+        update_values: Union[BaseModel, Dict[str, Any]],
+):
+    if isinstance(update_values, BaseModel):
+        update_values = update_values.dict()
+
+    upd_data = {k: v for k, v in update_values.items() if v is not None}
+
+    update_query = update(sa_model).where(
+        sa_model.id == object_id,
+    ).values(**upd_data)
+
+    result = await execute_query(async_session, update_query)
+
+    return
 
 
 @logger.catch(reraise=True)
