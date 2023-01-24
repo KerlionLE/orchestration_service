@@ -118,3 +118,5 @@ graph_run_id task_run_id
 
 
 4 -> 6
+
+{"metadata": {"task_id": 1}, "config": {}, "result": {}}

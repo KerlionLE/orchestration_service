@@ -5,12 +5,12 @@ class Queue:
 
         for consumer_config in queue_config.get('consumers_configs', list()):
             self.consumers.update({
-                consumer_config['consumer_id']: self.create_consumer(**consumer_config)
+                consumer_config.pop('consumer_id'): self.create_consumer(**consumer_config)
             })
 
         for producer_config in queue_config.get('producers_configs', list()):
             self.producers.update({
-                producer_config['producer_id']: self.create_producer(**producer_config)
+                producer_config.pop('producer_id'): self.create_producer(**producer_config)
             })
 
     def create_consumer(self, **consumer_config):

@@ -31,7 +31,7 @@ class Metabase:
     def get_engine(self, **db_config):
         return create_async_engine(
             self.get_sqlalchemy_db_url(**db_config),
-            echo=True
+            # echo=True
         )
 
     def get_session_factory(self, **db_config):
