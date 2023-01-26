@@ -57,6 +57,7 @@ class Process(Base, SchemaBase):
         BIGINT,
         ForeignKey(f'{SchemaBase.__table_args__.get("schema")}.service.id', ondelete="CASCADE"),
     )
+    # TODO: Должен быть уникальным только в рамках конкретного сервиса. Убрать 'unique=True'
     uid = Column(VARCHAR(128), unique=True, nullable=False)
 
     service = relationship('Service', back_populates='processes')

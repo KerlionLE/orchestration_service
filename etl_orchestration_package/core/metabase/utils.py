@@ -22,6 +22,7 @@ async def execute_query(async_session: AsyncSession, query: Query) -> CursorResu
 
     return result
 
+
 @logger.catch(reraise=True)
 async def insert_data(
         async_session: AsyncSession,

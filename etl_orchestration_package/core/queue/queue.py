@@ -3,15 +3,21 @@ class Queue:
         self.consumers = dict()
         self.producers = dict()
 
-        for consumer_config in queue_config.get('consumers_configs', list()):
+        self.queue_config = queue_config
+
+    def start(self):
+        for consumer_config in self.queue_config.get('consumers_configs', list()):
             self.consumers.update({
                 consumer_config.pop('consumer_id'): self.create_consumer(**consumer_config)
             })
 
-        for producer_config in queue_config.get('producers_configs', list()):
+        for producer_config in self.queue_config.get('producers_configs', list()):
             self.producers.update({
                 producer_config.pop('producer_id'): self.create_producer(**producer_config)
             })
+
+    def stop(self):
+        pass
 
     def create_consumer(self, **consumer_config):
         pass
@@ -34,5 +40,5 @@ class Queue:
     def consume_data(self, consumer_id):
         pass
 
-    def send_message(self, producer_id, message):
+    def send_message(self, producer_id, message, **send_config):
         pass

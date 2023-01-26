@@ -25,13 +25,13 @@ class KafkaQueue(Queue):
             # logger.error(f'Producer with producer_id {producer_id} does not exist!')
             raise ValueError(f'Consumer with consumer_id {consumer_id} does not exist!')
 
-        async with consumer as c:
-            data = await c.getmany(timeout_ms=1000, max_records=10)  # TODO: Вынести в конфиг
-            for _, messages in data.items():
-                for msg in messages:
-                    yield msg
+        print('START CONSUMING DATA')
+        data = await consumer.getmany(timeout_ms=1000, max_records=10)  # TODO: Вынести в конфиг
+        for _, messages in data.items():
+            for msg in messages:
+                yield msg
 
-    async def send_message(self, producer_id: Union[str, int], message: Union[Dict[str, Any], str]):
+    async def send_message(self, producer_id: Union[str, int], message: Union[Dict[str, Any], str], **send_config):
         producer = self.get_producer(producer_id)
 
         if not producer:
@@ -40,5 +40,30 @@ class KafkaQueue(Queue):
 
         json_message = json.dumps(message, default=str).encode('utf-8')
 
-        await producer.send(value=json_message)
+        print('START SENDING DATA')
+        await producer.send_and_wait(
+            topic=send_config.get('topic_name'),
+            value=json_message
+        )
 
+    async def start(self):
+        super(KafkaQueue, self).start()
+
+        producers = self.get_producers()
+        consumers = self.get_consumers()
+
+        for producer in producers:
+            await producer.start()
+
+        for consumer in consumers:
+            await consumer.start()
+
+    async def stop(self):
+        producers = self.get_producers()
+        consumers = self.get_consumers()
+
+        for producer in producers:
+            await producer.stop()
+
+        for consumer in consumers:
+            await consumer.stop()

@@ -22,3 +22,10 @@ def get_queue(queue_id='default'):
     if queue_id in QUEUE_DICT:
         return QUEUE_DICT[queue_id]
     raise Exception(f"UNKNOWN QUEUE: '{queue_id}'")
+
+
+def add_queue(queue_id, _queue):
+    if queue_id not in QUEUE_DICT:
+        QUEUE_DICT[queue_id] = _queue
+    else:
+        raise Exception(f"QUEUE WITH ID '{queue_id}' ALREADY EXISTS!!!")

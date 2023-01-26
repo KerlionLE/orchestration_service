@@ -22,3 +22,10 @@ def get_metabase(metabase_id='default'):
     if metabase_id in METABASE_DICT:
         return METABASE_DICT[metabase_id]
     raise Exception(f"UNKNOWN METABASE: '{metabase_id}'")
+
+
+def add_metabase(metabase_id, _metabase):
+    if metabase_id not in METABASE_DICT:
+        METABASE_DICT[metabase_id] = _metabase
+    else:
+        raise Exception(f"METABASE WITH ID '{metabase_id}' ALREADY EXISTS!!!")
