@@ -216,3 +216,22 @@ class GraphRun(Base, SchemaBase):
         server_default=text('now()'),
         server_onupdate=text('now()'),
     )
+
+
+class GraphRunTaskRun(Base, SchemaBase):
+    __tablename__ = 'graph_run_task_run'
+
+    id = Column(BIGINT, primary_key=True, autoincrement=True)
+    created_ts = Column(
+        TIMESTAMP,
+        nullable=False,
+        server_default=text('now()'),
+    )
+    graph_run_id = Column(
+        BIGINT,
+        ForeignKey(f'{SchemaBase.__table_args__.get("schema")}.graph_run.id', ondelete="CASCADE"),
+    )
+    task_run_id = Column(
+        BIGINT,
+        ForeignKey(f'{SchemaBase.__table_args__.get("schema")}.task_run.id', ondelete="CASCADE"),
+    )
