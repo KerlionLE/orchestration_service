@@ -6,6 +6,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_scoped_session
 
+from sqlalchemy.orm import defer
+from sqlalchemy.dialects.postgresql import insert
+
 
 class Metabase:
     def __init__(self, **db_config):
@@ -46,9 +49,17 @@ class Metabase:
         factory = self.get_session_factory(**db_config)
         yield async_scoped_session(factory, scopefunc=current_task)
 
+    def insert(self, *args, **kwargs):
+        pass
+
 
 class PGMetabase(Metabase):
     def __init__(self, **db_config):
         super(PGMetabase, self).__init__(**db_config)
 
         self.driver_name = 'postgresql+asyncpg'
+
+    def insert(self, model, data, exclude_fields=None):
+        if exclude_fields is None:
+            return insert(model).values(**data)
+        return insert(model).values(**data).options(*[defer(col) for col in exclude_fields])
