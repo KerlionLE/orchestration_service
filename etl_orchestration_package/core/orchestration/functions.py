@@ -90,14 +90,21 @@ from ..queue import get_queue, add_queue
 # --------------------------------------------------------------------------------------------------------------------
 
 async def handle_newest_task(finished_task_id, task_run_result):
-    # 1. Получаем все Chain у которых previous_task = task_id
-    # 2. Получаем все Graph (из GraphChain) у которых chain = chain_id
-    graph_ids = await get_all_graph_id_by_task_id(finished_task_id)
+    """
+    Функция генерации нового GraphRun
+    """
+    finished_tasks = [{
+        'task_id': finished_task_id,
+        'status': 'SUCCEED',  # TODO: Убрать в константы или подумать еще...
+        'result': task_run_result
+    }]
+
+    # 1. Получаем список всех Graph, в которых фигурирует завершенный task
+    graph_ids = await _get_all_graph_id_by_task_id(finished_task_id)
 
     graph_runs_dict = dict()
     for graph_id in graph_ids:
-        # 3. Проверяем существует ли GraphRun с таким graph_id и статусом RUNNING
-        # running_graph_runs = await get_graph_run_by_graph_id(graph_id=graph_id, status_id=1)
+        # 2. Проверяем существует ли GraphRun'ы с таким graph_id и статусом RUNNING
         running_graph_runs = await read_models_by_filter(
             model=GraphRun,
             filter_dict={
@@ -106,41 +113,36 @@ async def handle_newest_task(finished_task_id, task_run_result):
             }
         )
 
-        # Если существует
-        # (это случай когда для запуска новой задачи нужно дождаться N задач
+        # 2.1 Если существуют
+        # (это случай когда для запуска новой задачи (TaskRun) нужно дождаться N задач
         # автоматически зарегистрированных в таблице TaskRun - [1, 2, ..., N] -> 3):
-        finished_tasks = [{
-            'task_id': finished_task_id,
-            'status': 'SUCCEED',  # TODO: Убрать в константы или подумать еще...
-            'result': task_run_result
-        }]
-
-        new_graph_run_flag = False
         for graph_run in running_graph_runs:
+            # 2.1.1 Получаем список всех TaskRun в найденном GraphRun
             graph_run_task_run_list = await read_models_by_filter(
                 model=GraphRunTaskRun,
-                filter_dict={
-                    'graph_run_id': graph_run.get('id')
-                }
+                filter_dict={'graph_run_id': graph_run.get('id')}
             )
 
+            # 2.1.2 Проверяем не завершен ли полученный task в найденном GraphRun
             new_graph_run_flag = await _check_for_new_graph_run(graph_run_task_run_list, finished_tasks)
             if not new_graph_run_flag:
+                # 2.1.3 Если не завершен, то обновляем статус найденного task_run
                 graph_run_id, next_prev_task_runs_dict = await _get_and_update_running_graph_run(
                     graph_run_id=graph_run.get('id'),
                     finished_tasks=finished_tasks
                 )
                 graph_runs_dict.update({graph_run_id: next_prev_task_runs_dict})
 
-        if new_graph_run_flag:
-            graph_run_id, next_prev_task_runs_dict = await _create_and_initialize_new_graph_run(
-                graph_id=graph_id,
-                finished_tasks=finished_tasks
-            )
-            graph_runs_dict.update({graph_run_id: next_prev_task_runs_dict})
+            if new_graph_run_flag:
+                # 2.1.4 Если завершен, то создаем и инициализируем новый GraphRun
+                graph_run_id, next_prev_task_runs_dict = await _create_and_initialize_new_graph_run(
+                    graph_id=graph_id,
+                    finished_tasks=finished_tasks
+                )
+                graph_runs_dict.update({graph_run_id: next_prev_task_runs_dict})
 
-        # Если НЕ существует:
-        if not graph_runs_dict:
+        # 2.2 Если НЕ существует, то создаем и инициализируем новый GraphRun:
+        if not running_graph_runs:
             graph_run_id, next_prev_task_runs_dict = await _create_and_initialize_new_graph_run(
                 graph_id=graph_id,
                 finished_tasks=finished_tasks
@@ -167,128 +169,9 @@ async def handle_finished_task(graph_run_id, finished_task_run_id, task_run_resu
     return {graph_run_id: next_prev_task_runs_dict}
 
 
-# async def _get_all_graph_id_by_task_id(task_id):
-#     graph_ids = set()
-#
-#     # 1. Получаем все Chain у которых previous_task = task_id
-#     chains = await get_chains_by_prv_task_id(task_id)
-#
-#     # 2. Получаем все Graph (из GraphChain) у которых chain = chain_id
-#     for chain in chains:
-#         graph_chains = await get_graph_by_chain_id(chain.get('id'))
-#         for gc in graph_chains:
-#             graph_ids.add(gc.get('graph_id'))
-#
-#     return graph_ids
+# --------------------------------------------------------------------------------------------------------------------
 
-
-def _create_next_prev_tasks_dict(chains):
-    dct = defaultdict(list)
-    for c in chains:
-        dct[c.get('next_task_id')].append(c.get('previous_task_id'))
-
-    return dct
-
-
-async def _create_task_runs(next_prev_tasks_dict, finished_tasks=None):
-    dct2 = dict()
-
-    _finished_tasks = finished_tasks or list()
-    finished_tasks_data = {
-        task_data.get('task_id'): {
-            'result': task_data.get('result'),
-            'status': task_data.get('status'),
-        } for task_data in _finished_tasks
-    }
-
-    for n_task_id, p_task_ids in next_prev_tasks_dict.items():
-        n_task_run_id = await create_task_run(task_id=n_task_id)
-        dct2[n_task_id] = n_task_run_id
-        for p_task_id in p_task_ids:
-            if p_task_id not in dct2:
-                result = dict()
-                status = 2
-                if p_task_id in finished_tasks_data:
-                    result = finished_tasks_data[p_task_id].get('result')
-                    status = await get_status_id_by_value(finished_tasks_data[p_task_id].get('status'))
-
-                p_task_run_id = await create_task_run(
-                    task_id=p_task_id,
-                    status_id=status,
-                    result=result
-                )
-
-                dct2[p_task_id] = p_task_run_id
-
-    return dct2
-
-
-async def _get_task_run_dict(graph_run_task_run_list):
-    return {
-        tr.get('task_id'): tr.get('id')
-        async for tr in _get_task_runs_from_graph_run(graph_run_task_run_list)
-    }
-
-
-async def _get_task_runs_from_graph_run(graph_run_task_run_list):
-    for data in graph_run_task_run_list:
-        yield await get_model_by_id(model=TaskRun, _id=data.get('task_run_id'))
-
-
-async def _update_task_runs(graph_run_task_run_list, finished_tasks=None):
-    _finished_tasks = finished_tasks or list()
-    finished_tasks_data = {
-        task_data.get('task_id'): {
-            'result': task_data.get('result'),
-            'status': task_data.get('status'),
-        } for task_data in _finished_tasks
-    }
-    async for tr in _get_task_runs_from_graph_run(graph_run_task_run_list):
-        if tr.get('task_id') in finished_tasks_data:
-            result = finished_tasks_data[tr.get('task_id')].get('result')
-            status = await get_status_id_by_value(
-                finished_tasks_data[tr.get('task_id')].get('status')
-            )
-
-            _ = await update_model_field_value(
-                model=TaskRun, _id=tr.get('id'),
-                field='status_id', value=status
-            )
-
-            _ = await update_model_field_value(
-                model=TaskRun, _id=tr.get('id'),
-                field='result', value=result
-            )
-
-
-async def _check_for_new_graph_run(graph_run_task_run_list, finished_tasks):
-    finished_task_ids = [task_data.get('task_id') for task_data in finished_tasks]
-    async for tr in _get_task_runs_from_graph_run(graph_run_task_run_list):
-        if tr.get('task_id') in finished_task_ids and tr.get('status_id') == 4:
-            return True
-    return False
-
-
-def _create_next_prev_task_runs_dict(next_prev_tasks_dict, task_runs_dict):
-    dct3 = dict()
-    for n_task_id, p_task_ids in next_prev_tasks_dict.items():
-        dct3[task_runs_dict.get(n_task_id)] = [task_runs_dict.get(p_task_id) for p_task_id in p_task_ids]
-
-    return dct3
-
-
-async def _create_graph_run_task_run(graph_run_id, task_run_ids):
-    ids_list = list()
-    for tr_id in task_run_ids:
-        _id = await create_graph_run_task_run(
-            graph_run_id=graph_run_id,
-            task_run_id=tr_id
-        )
-        ids_list.append(_id)
-    return ids_list
-
-
-async def _create_and_initialize_new_graph_run(graph_id, status_id=1, finished_tasks=None):
+async def create_and_initialize_new_graph_run(graph_id, status_id=1, finished_tasks=None):
     # 3.1. Создаем GraphRun со статусом RUNNING (c указанием полученного graph_id)
     graph_run_id = await create_graph_run(graph_id=graph_id, status_id=status_id)
 
@@ -315,28 +198,6 @@ async def _create_and_initialize_new_graph_run(graph_id, status_id=1, finished_t
             ids_set.add(_p_task_run_id)
 
     _ = await _create_graph_run_task_run(graph_run_id, ids_set)
-
-    return graph_run_id, next_prev_task_runs_dict
-
-
-async def _get_and_update_running_graph_run(graph_run_id, finished_tasks=None):
-    _finished_tasks = finished_tasks or list()
-    graph_run_task_run_list = await get_graph_run_task_run_by_graph_run_id(graph_run_id=graph_run_id)
-
-    _ = await _update_task_runs(graph_run_task_run_list, _finished_tasks)
-    task_runs_dict = await _get_task_run_dict(graph_run_task_run_list)
-
-    # 3.2. Получаем все Chain (из GraphChain) у которых graph = graph_id
-    graph_run = await get_model_by_id(GraphRun, graph_run_id)
-    gc_list = await get_chains_by_graph_id(graph_id=graph_run.get('graph_id'))
-    chains = await get_chains_by_ids([gc.get('chain_id') for gc in gc_list])
-
-    # 3.3. Строим словарь зависимостей -> {next_task_id: [previous_task_id1, previous_task_id2, ...]}
-    next_prev_tasks_dict = _create_next_prev_tasks_dict(chains)
-
-    # 3.6. Из словаря зависимостей (п. 3.3) и созданных TaskRun строим новый словарь зависимостей
-    # по task_run_id
-    next_prev_task_runs_dict = _create_next_prev_task_runs_dict(next_prev_tasks_dict, task_runs_dict)
 
     return graph_run_id, next_prev_task_runs_dict
 

@@ -95,6 +95,11 @@ def read_model_by_id(model, _id):
 
 
 @metabase_select_wrapper()
+def read_models_by_ids_list(model, ids_list):
+    return select(model).where(model.id.in_(ids_list))
+
+
+@metabase_select_wrapper()
 def read_models_by_filter(model, filter_dict):
     def _read_command_generator(_command, filter_field, filter_value):
         return _command.where(model.__dict__[filter_field] == filter_value)

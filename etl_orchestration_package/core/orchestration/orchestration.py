@@ -22,36 +22,6 @@ def orchestration_process(metabase_interface=None, queue_interface=None):
     loop.close()
 
 
-def get_graphruns(queue_interface):
-    graph_runs_dict = dict()
-
-    async for msg in queue_interface.consume_data('finished_tasks'):
-        data = json.loads(msg.value)
-
-        metadata = data.get('metadata')
-        if not metadata:
-            raise Exception("BLANK METADATA!!!")
-
-        finished_task_id = metadata.get('task_id')
-        if finished_task_id is not None:
-            graph_run_dict = await handle_newest_task(
-                finished_task_id=finished_task_id,
-                task_run_result=data.get('result')
-            )
-
-        else:
-            graph_run_dict = await handle_finished_task(
-                graph_run_id=metadata.get('graphrun_id'),
-                finished_task_run_id=metadata.get('taskrun_id'),
-                task_run_result=data.get('result'),
-                task_run_status=data.get('status')
-            )
-
-        graph_runs_dict.update(graph_run_dict)
-
-    return graph_runs_dict
-
-
 async def orchestration():
     queue_interface = get_queue()
     await queue_interface.start()
@@ -62,7 +32,59 @@ async def orchestration():
         # TODO: Нужно коммитить консьюмера!!!
 
         print('RUNNING INFINITE LOOP')
-        graph_runs_dict = get_graphruns(queue_interface)
+        graph_runs_dict = dict()
+
+        # 1. Слушаем топик сообщений от сервисов
+        async for msg in queue_interface.consume_data('finished_tasks'):
+            data = json.loads(msg.value)
+
+            # 1.1 Получаем метаданные задачи (task)
+            metadata = data.get('metadata')
+            if not metadata:
+                raise Exception("BLANK METADATA!!!")
+
+            # 1.2 Пробуем получить 'task_id' из метаданных
+            finished_task_id = metadata.get('task_id')
+            if finished_task_id is not None:
+                # 1.2.1 Если 'task_id' присутствует в метаданных это означает,
+                #       что это задача новая и нам необходимо
+                #       сгенерировать новые графы (GraphRun), и зарегистрировать
+                #       задачу в метабазе
+                graph_run_dict = await handle_newest_task(
+                    finished_task_id=finished_task_id,
+                    task_run_result=data.get('result')
+                )
+
+            else:
+                # 1.2.2 Если 'task_id' отсутствует в метаданных это означает,
+                #       что это задача была запущена с помощью сервиса оркестрации
+                #       и все ее метаданные нужно только обновить
+                graph_run_dict = await handle_finished_task(
+                    graph_run_id=metadata.get('graphrun_id'),
+                    finished_task_run_id=metadata.get('taskrun_id'),
+                    task_run_result=data.get('result'),
+                    task_run_status=data.get('status')
+                )
+
+            # 1.3 Результатом шага 1.2 является словарь вида
+            # {
+            #     graph_run_id1: {
+            #         next_task_run_id1: [
+            #             prev_task_run_id1,
+            #             prev_task_run_id2,
+            #             ...
+            #         ],
+            #         next_task_run_id2: [
+            #             prev_task_run_id3,
+            #             prev_task_run_id4,
+            #             ...
+            #         ],
+            #     }
+            # }
+            # Так как сообщений из очереди может приехать сразу несколько
+            # мы формируем один большой словарь таких графов с целью их
+            # последовательного обновления и формирования новых задач в рамках этих графов
+            graph_runs_dict.update(graph_run_dict)
 
         for graph_run_id, next_prev_task_runs_dict in graph_runs_dict.items():
             graph_run_failed_flag = False
