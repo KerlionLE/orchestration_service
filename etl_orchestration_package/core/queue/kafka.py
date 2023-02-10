@@ -25,8 +25,15 @@ class KafkaQueue(Queue):
             # logger.error(f'Producer with producer_id {producer_id} does not exist!')
             raise ValueError(f'Consumer with consumer_id {consumer_id} does not exist!')
 
-        print('START CONSUMING DATA')
+        logger.info('TRY TO CONSUME DATA...')
         data = await consumer.getmany(timeout_ms=1000, max_records=10)  # TODO: Вынести в конфиг
+
+        if not data:
+            logger.info('EMPTY QUEUE...')
+        else:
+            logger.info('FOUND SOME MESSAGES!')
+            logger.debug(f'DATA: {data}')
+
         for _, messages in data.items():
             for msg in messages:
                 yield msg
@@ -40,7 +47,8 @@ class KafkaQueue(Queue):
 
         json_message = json.dumps(message, default=str).encode('utf-8')
 
-        print('START SENDING DATA')
+        logger.info(f'SENDING DATA TO KAFKA TOPIC ({send_config.get("topic_name")})...')
+        logger.debug(f'DATA: {json_message}')
         await producer.send_and_wait(
             topic=send_config.get('topic_name'),
             value=json_message

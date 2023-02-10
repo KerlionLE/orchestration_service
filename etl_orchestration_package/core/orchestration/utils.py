@@ -64,13 +64,15 @@ async def create_task_runs(next_prev_tasks_dict):
     for n_task_id, p_task_ids in next_prev_tasks_dict.items():
         dct2[n_task_id] = {
             'task_id': n_task_id,
-            'status': 2,  # TODO: status_id?
+            'status_id': 2,  # TODO: status_id?
+            'config': dict(),
             'result': dict()
         }
         for p_task_id in p_task_ids:
             dct2[p_task_id] = {
                 'task_id': p_task_id,
-                'status': 2,  # TODO: status_id?
+                'status_id': 2,  # TODO: status_id?
+                'config': dict(),
                 'result': dict()
             }
 
@@ -83,25 +85,41 @@ async def create_task_runs(next_prev_tasks_dict):
     return dct2
 
 
+async def update_task_run(task_run_id, status=None, result=None, config=None):
+    data = {}
+
+    if status is not None:
+        status_id = await db_tools.read_models_by_filter(
+            model=db_models.TaskRunStatus,
+            filter_dict={
+                'status': status
+            }
+        )
+        data.update({'status_id': status_id[0].get('id')})
+
+    if result is not None:
+        data.update({'result': result})
+
+    if config is not None:
+        data.update({'config': config})
+
+    if data:
+        _ = await db_tools.update_model_by_id(
+            model=db_models.TaskRun,
+            _id=task_run_id,
+            data=data
+        )
+
+
 async def update_task_runs(task_run_dict, tasks_data):
     """
     Функция обновления объектов TaskRun в соответствии с переданным списком параметров
     """
 
-    for task_id, task_run_id in task_run_dict:
+    for task_id, task_run_id in task_run_dict.items():
         if task_id in tasks_data:
-            status = await db_tools.read_models_by_filter(
-                model=db_models.TaskRunStatus,
-                filter_dict={
-                    'status': tasks_data.get(task_id, dict()).get('status')
-                }
-            )
-
-            _ = await db_tools.update_model_by_id(
-                model=db_models.TaskRun,
-                _id=task_run_id,
-                data={
-                    'result': tasks_data.get(task_id, dict()).get('result', dict()),
-                    'status_id': status[0]
-                }
+            await update_task_run(
+                task_run_id,
+                status=tasks_data.get(task_id, dict()).get('status'),
+                result=tasks_data.get(task_id, dict()).get('result')
             )

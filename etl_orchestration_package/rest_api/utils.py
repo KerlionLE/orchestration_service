@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from sqlalchemy.orm import DeclarativeMeta
 
-from ..core.metabase import utils as db_tools
+from etl_orchestration_package.core.metabase import utils as db_tools
 
 
 @logger.catch(reraise=True)

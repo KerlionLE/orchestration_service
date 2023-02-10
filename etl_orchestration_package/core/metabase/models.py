@@ -35,6 +35,7 @@ class Service(Base, SchemaBase):
         server_default=text('now()'),
     )
     name = Column(VARCHAR(64), unique=True, nullable=False)
+    topic_name = Column(VARCHAR(64), unique=True, nullable=False)
 
     processes = relationship(
         'Process',

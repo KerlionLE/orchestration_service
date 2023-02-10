@@ -1,6 +1,8 @@
 import json
 import asyncio
 
+from loguru import logger
+
 from .functions import handle_newest_task, handle_finished_task, get_message_for_service
 
 from ..metabase import get_metabase, add_metabase
@@ -27,22 +29,25 @@ async def orchestration():
     queue_interface = get_queue()
     await queue_interface.start()
 
+    logger.info('RUNNING INFINITE LOOP')
     while True:
+        # TODO: Маппинг статуса и status_id
         # TODO: Прикрутить GracefulKill (выход из бесконечного цикла)
         # TODO: Прикрутить логи!!!!
         # TODO: Нужно коммитить консьюмера!!!
 
-        print('RUNNING INFINITE LOOP')
         graph_runs_dict = dict()
-
         # 1. Слушаем топик сообщений от сервисов
-        async for msg in queue_interface.consume_data('finished_tasks'):
+        async for msg in queue_interface.consume_data('default'):
             data = json.loads(msg.value)
+
+            logger.debug(f'MESSAGE: {data}')
 
             # 1.1 Получаем метаданные задачи (task)
             metadata = data.get('metadata')
             if not metadata:
-                raise Exception("BLANK METADATA!!!")
+                logger.error(f"CAN\'T FIND METADATA IN MESSAGE: {data}")
+                continue
 
             # 1.2 Пробуем получить 'task_run_id' из метаданных
             finished_task_run_id = metadata.get('taskrun_id')
@@ -50,7 +55,6 @@ async def orchestration():
                 # 1.2.1 Если 'task_run_id' присутствует в метаданных это означает,
                 #       что это задача была запущена с помощью сервиса оркестрации
                 #       и все ее метаданные нужно только обновить
-
                 graph_run_dict = await handle_finished_task(
                     graph_run_id=metadata.get('graphrun_id'),
                     finished_task_run_id=finished_task_run_id,
@@ -110,7 +114,7 @@ async def orchestration():
                     continue
 
                 # Если хотя бы один из следующих по графу Taskrun'ов не оказался в
-                # одном из статусов SUCCEED или FAILED то GraphRun еще не считается
+                # одном из статусов SUCCEED или FAILED, то GraphRun еще не считается
                 # завершенным
                 graph_run_finished_flag = False
 
@@ -137,7 +141,7 @@ async def orchestration():
                 # необходимо формировать и отправлять сообщение для следующего TaskRun
                 if prev_task_runs_success_flag:
                     # 2.2.1 Формируем сообщение
-                    service_name, message_for_service = await get_message_for_service(
+                    topic_name, message_for_service = await get_message_for_service(
                         graph_run_id, next_task_run_id, *prev_task_run_ids
                     )
 
@@ -145,7 +149,7 @@ async def orchestration():
                     await queue_interface.send_message(
                         producer_id='default',
                         message=message_for_service,
-                        topic_name=service_name  # TODO: Пока service_name == topic_name
+                        topic_name=topic_name
                     )
 
                     # 2.2.3 Обновляем значение параметров следующего TaskRun
@@ -171,5 +175,7 @@ async def orchestration():
                     field='status_id',
                     value=5 if graph_run_failed_flag else 4
                 )
+
+
 
     await queue_interface.stop()

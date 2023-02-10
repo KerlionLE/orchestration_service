@@ -34,7 +34,7 @@ def metabase_select_wrapper(read_one=False):
 
             query_result = await execute_query(async_session, select_query)
             if read_one:
-                return query_result.scalars().first()
+                return query_result.scalars().first().to_dict()
             return [item.to_dict() for item in query_result.scalars()]
 
         return wrapper
