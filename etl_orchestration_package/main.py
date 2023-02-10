@@ -33,7 +33,7 @@ queue_interface = create_queue(
                 's001cd-mq-kfk02.dev002.local:9092',
                 's001cd-mq-kfk03.dev002.local:9092'
             ],
-            'group_id': 'orchestration_test_group_2',
+            'group_id': 'orchestration_test_group_1',
             'enable_auto_commit': False
         }
     ],
@@ -75,6 +75,6 @@ def shutdown_event():
         process.kill()
 
 
-# if __name__ == "__main__":
-#     uvicorn.run(app, host="127.0.0.1", port=8000)
-    # orchestration_process()
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)
+    orchestration_process()

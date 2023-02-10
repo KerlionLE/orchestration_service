@@ -1,169 +1,125 @@
-import json
-import asyncio
+from . import utils as orc_tools
 
-from collections import defaultdict
-
-from sqlalchemy import select, update
-from sqlalchemy.dialects.postgresql import insert
-
-from ..metabase import get_metabase, add_metabase
-from ..metabase.models import Chain, GraphChain, GraphRun, TaskRun, GraphRunTaskRun, \
-    Task, Process, Service, Graph, TaskRunStatus
-from ..metabase.utils import execute_query
-
-from ..queue import get_queue, add_queue
+from ..metabase import utils as db_tools
+from ..metabase import models as db_models
 
 
-# @metabase_select_wrapper
-# def _get_model_by_id(model, _id):
-#     return select(model).where(model.id == _id)
-
-
-# async def get_model_by_id(model, _id):
-#     lst = await _get_model_by_id(model, _id)
-#     return lst[0]
-
-
-# @metabase_select_wrapper
-# def _get_status_id_by_value(status):
-#     return select(TaskRunStatus).where(TaskRunStatus.status == status)
-
-
-# async def get_status_id_by_value(status):
-#     lst = await _get_status_id_by_value(status)
-#     if lst:
-#         return lst[0].get('id')
-#     else:
-#         # logging.error("UNKNOWN STATUS!!!")
-#         raise Exception("UNKNOWN STATUS!!!")  # TODO: Убрать потом
-
-
-# @metabase_select_wrapper
-# def get_chains_by_prv_task_id(previous_task_id):
-#     return select(Chain).where(Chain.previous_task_id == previous_task_id)
-#
-#
-# @metabase_select_wrapper
-# def get_chains_by_ids(chain_ids):
-#     return select(Chain).where(Chain.id.in_(chain_ids))
-#
-#
-# @metabase_select_wrapper
-# def get_chains_by_graph_id(graph_id):
-#     return select(GraphChain).where(GraphChain.graph_id == graph_id)
-#
-#
-# @metabase_select_wrapper
-# def get_graph_by_chain_id(chain_id):
-#     return select(GraphChain).where(GraphChain.chain_id == chain_id)
-#
-#
-# @metabase_select_wrapper
-# def get_graph_run_by_graph_id(graph_id, status_id):
-#     return select(GraphRun).where(GraphRun.graph_id == graph_id).where(GraphRun.status_id == status_id)
-#
-#
-# @metabase_select_wrapper
-# def get_graph_run_task_run_by_graph_run_id(graph_run_id):
-#     return select(GraphRunTaskRun).where(GraphRunTaskRun.graph_run_id == graph_run_id)
-#
-#
-# @metabase_insert_wrapper
-# def create_graph_run(graph_id, status_id=2):
-#     return insert(GraphRun).values(graph_id=graph_id, status_id=status_id, config={}, result={})
-#
-#
-# @metabase_insert_wrapper
-# def create_task_run(task_id, status_id=2, config=None, result=None):
-#     return insert(TaskRun).values(
-#         task_id=task_id, status_id=status_id,
-#         config=config or dict(),
-#         result=result or dict()
-#     )
-#
-#
-# @metabase_insert_wrapper
-# def create_graph_run_task_run(graph_run_id, task_run_id):
-#     return insert(GraphRunTaskRun).values(graph_run_id=graph_run_id, task_run_id=task_run_id)
-
-
-# --------------------------------------------------------------------------------------------------------------------
-
-async def handle_newest_task(finished_task_id, task_run_result):
+async def handle_newest_task(task_id, task_run_result):
     """
-    Функция генерации нового GraphRun
+    Функция генерации нового GraphRun по task_id
     """
-    finished_tasks = [{
-        'task_id': finished_task_id,
-        'status': 'SUCCEED',  # TODO: Убрать в константы или подумать еще...
-        'result': task_run_result
-    }]
 
-    # 1. Получаем список всех Graph, в которых фигурирует завершенный task
-    graph_ids = await _get_all_graph_id_by_task_id(finished_task_id)
+    finished_tasks = {
+        task_id: {
+            'status_id': 'SUCCEED',  # TODO: Убрать в константы или подумать еще...
+            'result': task_run_result
+        }
+    }
+
+    # 1. Получаем список всех graph_id, в которых фигурирует завершенный task
+    graph_ids = await get_all_graph_id_by_task_id(task_id)
 
     graph_runs_dict = dict()
     for graph_id in graph_ids:
         # 2. Проверяем существует ли GraphRun'ы с таким graph_id и статусом RUNNING
-        running_graph_runs = await read_models_by_filter(
-            model=GraphRun,
+        running_graph_runs = await db_tools.read_models_by_filter(
+            model=db_models.GraphRun,
             filter_dict={
                 'graph_id': graph_id,
                 'status_id': 1  # TODO: status_id?
             }
         )
 
-        # 2.1 Если существуют
+        # 2.1 Если таких НЕ существует, то создаем и инициализируем новый GraphRun:
+        if not running_graph_runs:
+            graph_run_id, next_prev_task_runs_dict = await create_new_graph(graph_id)
+            graph_runs_dict.update({graph_run_id: next_prev_task_runs_dict})
+
+        # 2.2 Если существуют
         # (это случай когда для запуска новой задачи (TaskRun) нужно дождаться N задач
         # автоматически зарегистрированных в таблице TaskRun - [1, 2, ..., N] -> 3):
         for graph_run in running_graph_runs:
             # 2.1.1 Получаем список всех TaskRun в найденном GraphRun
-            graph_run_task_run_list = await read_models_by_filter(
-                model=GraphRunTaskRun,
+            graph_run_task_run_list = await db_tools.read_models_by_filter(
+                model=db_models.GraphRunTaskRun,
                 filter_dict={'graph_run_id': graph_run.get('id')}
             )
 
-            # 2.1.2 Проверяем не завершен ли полученный task в найденном GraphRun
-            new_graph_run_flag = await _check_for_new_graph_run(graph_run_task_run_list, finished_tasks)
+            task_run_list = await db_tools.read_models_by_ids_list(
+                model=db_models.TaskRun,
+                ids_list=[data.get('task_run_id') for data in graph_run_task_run_list]
+            )
+
+            # 2.1.2 Проверяем не завершен ли полученный TaskRun в найденном GraphRun
+            new_graph_run_flag = await orc_tools.check_for_new_graph_run(
+                task_run_list,
+                finished_task_ids=[_task_id for _task_id in finished_tasks]
+            )
             if not new_graph_run_flag:
-                # 2.1.3 Если не завершен, то обновляем статус найденного task_run
-                graph_run_id, next_prev_task_runs_dict = await _get_and_update_running_graph_run(
-                    graph_run_id=graph_run.get('id'),
-                    finished_tasks=finished_tasks
+                # 2.1.3 Если не завершен, то
+
+                # 2.1.3.1 Формируем словарь вида {task_run_id: task_id}
+                task_runs_dict = await orc_tools.get_task_run_dict(task_run_list)
+
+                # 2.1.3.2 Обновляем статус найденного task_run
+                _ = await orc_tools.update_task_runs(
+                    task_run_dict=task_runs_dict,
+                    tasks_data=finished_tasks
                 )
-                graph_runs_dict.update({graph_run_id: next_prev_task_runs_dict})
+
+                # 2.1.3.3 Получаем словарь связей следующих и предыдущих TaskRun
+                next_prev_task_runs_dict = await get_graph(
+                    graph_run=graph_run, task_runs_dict=task_runs_dict
+                )
+
+                graph_runs_dict.update({graph_run.get('id'): next_prev_task_runs_dict})
 
             if new_graph_run_flag:
-                # 2.1.4 Если завершен, то создаем и инициализируем новый GraphRun
-                graph_run_id, next_prev_task_runs_dict = await _create_and_initialize_new_graph_run(
-                    graph_id=graph_id,
-                    finished_tasks=finished_tasks
-                )
+                # 2.2.1 Если завершен, то создаем новый GraphRun
+                graph_run_id, next_prev_task_runs_dict = await create_new_graph(graph_id)
                 graph_runs_dict.update({graph_run_id: next_prev_task_runs_dict})
-
-        # 2.2 Если НЕ существует, то создаем и инициализируем новый GraphRun:
-        if not running_graph_runs:
-            graph_run_id, next_prev_task_runs_dict = await _create_and_initialize_new_graph_run(
-                graph_id=graph_id,
-                finished_tasks=finished_tasks
-            )
-            graph_runs_dict.update({graph_run_id: next_prev_task_runs_dict})
 
     return graph_runs_dict
 
 
 async def handle_finished_task(graph_run_id, finished_task_run_id, task_run_result, task_run_status):
-    task_run = await get_model_by_id(TaskRun, finished_task_run_id)
+    """
+    Функция обновления состояний TaskRun существующего GraphRun
+    """
 
-    finished_tasks = [{
-        'task_id': task_run.get('task_id'),
-        'status': task_run_status,
-        'result': task_run_result
-    }]
+    # 1. Получаем объект TaskRun'a
+    task_run = await db_tools.read_model_by_id(
+        model=db_models.TaskRun,
+        _id=finished_task_run_id
+    )
 
-    graph_run_id, next_prev_task_runs_dict = await _get_and_update_running_graph_run(
-        graph_run_id,
-        finished_tasks=finished_tasks
+    # 2. Получаем список всех TaskRun в найденном GraphRun
+    graph_run_task_run_list = await db_tools.read_models_by_filter(
+        model=db_models.GraphRunTaskRun,
+        filter_dict={'graph_run_id': graph_run_id}
+    )
+    task_run_list = await db_tools.read_models_by_ids_list(
+        model=db_models.TaskRun,
+        ids_list=[data.get('task_run_id') for data in graph_run_task_run_list]
+    )
+
+    # 3. Формируем словарь вида {task_run_id: task_id}
+    task_runs_dict = await orc_tools.get_task_run_dict(task_run_list)
+
+    # 4. Обновляем статус найденного task_run
+    _ = await orc_tools.update_task_runs(
+        task_run_dict=task_runs_dict,
+        tasks_data={
+            task_run.get('task_id'): {
+                'status_id': task_run_status,
+                'result': task_run_result
+            }
+        }
+    )
+
+    # 5. Получаем словарь связей следующих и предыдущих TaskRun
+    next_prev_task_runs_dict = await get_graph(
+        graph_run_id=graph_run_id, task_runs_dict=task_runs_dict
     )
 
     return {graph_run_id: next_prev_task_runs_dict}
@@ -171,53 +127,130 @@ async def handle_finished_task(graph_run_id, finished_task_run_id, task_run_resu
 
 # --------------------------------------------------------------------------------------------------------------------
 
-async def create_and_initialize_new_graph_run(graph_id, status_id=1, finished_tasks=None):
-    # 3.1. Создаем GraphRun со статусом RUNNING (c указанием полученного graph_id)
-    graph_run_id = await create_graph_run(graph_id=graph_id, status_id=status_id)
 
-    # 3.2. Получаем все Chain (из GraphChain) у которых graph = graph_id
-    gc_list = await get_chains_by_graph_id(graph_id=graph_id)
-    chains = await get_chains_by_ids([gc.get('chain_id') for gc in gc_list])
+async def get_all_graph_id_by_task_id(task_id):
+    """
+    Функция получения всех graph_id определенных Graph, в которых фигурирует конкретный task_id
+    """
+    graph_ids = set()
 
-    # 3.3. Строим словарь зависимостей -> {next_task_id: [previous_task_id1, previous_task_id2, ...]}
-    next_prev_tasks_dict = _create_next_prev_tasks_dict(chains)
+    # 1. Получаем все Chain у которых previous_task = task_id
+    chains = await db_tools.read_models_by_filter(model=db_models.Chain, filter_dict={'previous_task_id': task_id})
 
-    # 3.4. Создаем TaskRun'ы со статусом CREATED (параллельно создается словарь -> {task_id: TaskRun})
-    #      (по всем next_task_id, previous_task_id, кроме того который пришел )
-    task_runs_dict = await _create_task_runs(next_prev_tasks_dict, finished_tasks)
+    # 2. Получаем все Graph (из GraphChain) у которых chain = chain_id
+    for chain in chains:
+        graph_chains = await db_tools.read_models_by_filter(
+            model=db_models.GraphChain,
+            filter_dict={'chain_id': chain.get('id')}
+        )
+        for gc in graph_chains:
+            graph_ids.add(gc.get('graph_id'))
 
-    # 3.6. Из словаря зависимостей (п. 3.3) и созданных TaskRun строим новый словарь зависимостей
-    # по task_run_id
-    next_prev_task_runs_dict = _create_next_prev_task_runs_dict(next_prev_tasks_dict, task_runs_dict)
+    return graph_ids
 
-    # 3.7. Создать GraphRunTaskRun записи с использованием сгенерированного словаря
+
+# --------------------------------------------------------------------------------------------------------------------
+
+
+async def create_new_graph(graph_id):
+    """
+    Функция создания нового GraphRun.
+    Функция возвращает id нового GraphRun и словарь
+    {next_task_run_id: [previous_task_run_id1, previous_task_run_id2, ...]}
+    """
+    # 1. Создаем новый GraphRun
+    graph_run = await db_tools.create_model(
+        model=db_models.GraphRun, data={
+            'graph_id': graph_id,
+            'status_id': 1,  # TODO: status_id?
+            'config': dict(),
+            'result': dict()
+        }
+    )
+    # 2. Получаем словарь связей следующих и предыдущих TaskRun нового GraphRun
+    next_prev_task_runs_dict = await get_graph(graph_run=graph_run)
+
+    # 3. Создаем GraphRunTaskRun записи с использованием сгенерированного словаря
     ids_set = set()
     for _n_task_run_id, _p_task_run_ids in next_prev_task_runs_dict.items():
         ids_set.add(_n_task_run_id)
         for _p_task_run_id in _p_task_run_ids:
             ids_set.add(_p_task_run_id)
 
-    _ = await _create_graph_run_task_run(graph_run_id, ids_set)
+    for _id in ids_set:
+        _ = db_tools.create_model(
+            model=db_models.GraphRunTaskRun,
+            data={
+                'graph_run_id': graph_run.get('id'),
+                'task_run_id': _id
+            }
+        )
 
-    return graph_run_id, next_prev_task_runs_dict
+    return graph_run.get('id'), next_prev_task_runs_dict
+
+
+# --------------------------------------------------------------------------------------------------------------------
+
+async def get_graph(graph_run=None, graph_run_id=None, task_runs_dict=None):
+    """
+    Функция получения словаря зависимостей
+    {next_task_run_id: [previous_task_run_id1, previous_task_run_id2, ...]}
+    """
+
+    # 0. Получаем объект GraphRun из МетаБД, если он не был передан
+    if graph_run is None:
+        if graph_run_id is None:
+            raise Exception("'graph_run is None' AND 'graph_run_id is None'")
+
+        graph_run = db_tools.read_model_by_id(
+            model=db_models.GraphRun, _id=graph_run_id
+        )
+
+    # 1. Получаем все Chain (из GraphChain) у которых graph = graph_id
+    gc_list = await db_tools.read_models_by_filter(
+        model=db_models.GraphChain, filter_dict={'graph_id': graph_run.get('graph_id')}
+    )
+    chains = await db_tools.read_models_by_ids_list(
+        model=db_models.Chain, ids_list=[gc.get('chain_id') for gc in gc_list]
+    )
+
+    # 2. Строим словарь зависимостей -> {next_task_id: [previous_task_id1, previous_task_id2, ...]}
+    next_prev_tasks_dict = orc_tools.create_next_prev_tasks_dict(chains)
+
+    # 3. Получаем словарь -> {task_id: TaskRun}, если он не был передан ранее
+    if task_runs_dict is None:
+        task_runs_dict = await orc_tools.create_task_runs(next_prev_tasks_dict)
+
+    # 3. Из словаря зависимостей (п. 2) и созданных TaskRun строим новый словарь зависимостей
+    # по task_run_id
+    next_prev_task_runs_dict = orc_tools.create_next_prev_task_runs_dict(next_prev_tasks_dict, task_runs_dict)
+
+    return next_prev_task_runs_dict
 
 
 # --------------------------------------------------------------------------------------------------------------------
 
 async def get_message_for_service(graph_run_id, next_task_run_id, *previous_task_run_ids):
-    graph_run = await get_model_by_id(model=GraphRun, _id=graph_run_id)
-    graph = await get_model_by_id(model=Graph, _id=graph_run.get('graph_id'))
+    """
+    Функция подготовки сообщения для отправки в очередь задач конкретного сервиса.
+    """
 
-    next_task_run = await get_model_by_id(model=TaskRun, _id=next_task_run_id)
-    next_task = await get_model_by_id(model=Task, _id=next_task_run.get('task_id'))
+    # 1. По входным данным собираем необходимые параметры для сообщения из МетаБД
+    graph_run = await db_tools.read_model_by_id(model=db_models.GraphRun, _id=graph_run_id)
+    graph = await db_tools.read_model_by_id(model=db_models.Graph, _id=graph_run.get('graph_id'))
 
-    process = await get_model_by_id(model=Process, _id=next_task.get('process_id'))
-    service = await get_model_by_id(model=Service, _id=process.get('service_id'))
+    next_task_run = await db_tools.read_model_by_id(model=db_models.TaskRun, _id=next_task_run_id)
+    next_task = await db_tools.read_model_by_id(model=db_models.Task, _id=next_task_run.get('task_id'))
 
+    process = await db_tools.read_model_by_id(model=db_models.Process, _id=next_task.get('process_id'))
+    service = await db_tools.read_model_by_id(model=db_models.Service, _id=process.get('service_id'))
+
+    # 2. Формируем конфиг следующего TaskRun.
+    # Заполняем config_template данными из результатов предыдущих TaskRun этого GraphRun
     next_task_config_template = next_task.get('config_template')
     next_task_run_config = next_task_run.get('config', dict())
     for previous_task_run_id in previous_task_run_ids:
-        previous_task_run = await get_model_by_id(model=TaskRun, _id=previous_task_run_id)
+        previous_task_run = await db_tools.read_model_by_id(model=db_models.TaskRun, _id=previous_task_run_id)
 
         previous_task_run_result = previous_task_run.get('result', dict())
         for key, default_value in next_task_config_template.items():

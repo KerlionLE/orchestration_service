@@ -1,12 +1,13 @@
 import json
 import asyncio
 
-from .functions import handle_newest_task, handle_finished_task
+from .functions import handle_newest_task, handle_finished_task, get_message_for_service
 
 from ..metabase import get_metabase, add_metabase
 from ..queue import get_queue, add_queue
 
-from ..metabase.utils import read_model_by_id, update_model_field_value
+from ..metabase import utils as db_tools
+from ..metabase import models as db_models
 
 
 def orchestration_process(metabase_interface=None, queue_interface=None):
@@ -43,27 +44,28 @@ async def orchestration():
             if not metadata:
                 raise Exception("BLANK METADATA!!!")
 
-            # 1.2 Пробуем получить 'task_id' из метаданных
-            finished_task_id = metadata.get('task_id')
-            if finished_task_id is not None:
-                # 1.2.1 Если 'task_id' присутствует в метаданных это означает,
+            # 1.2 Пробуем получить 'task_run_id' из метаданных
+            finished_task_run_id = metadata.get('taskrun_id')
+            if finished_task_run_id is not None:
+                # 1.2.1 Если 'task_run_id' присутствует в метаданных это означает,
+                #       что это задача была запущена с помощью сервиса оркестрации
+                #       и все ее метаданные нужно только обновить
+
+                graph_run_dict = await handle_finished_task(
+                    graph_run_id=metadata.get('graphrun_id'),
+                    finished_task_run_id=finished_task_run_id,
+                    task_run_result=data.get('result'),
+                    task_run_status=data.get('status')
+                )
+
+            else:
+                # 1.2.2 Если 'task_run_id' отсутствует в метаданных это означает,
                 #       что это задача новая и нам необходимо
                 #       сгенерировать новые графы (GraphRun), и зарегистрировать
                 #       задачу в метабазе
                 graph_run_dict = await handle_newest_task(
-                    finished_task_id=finished_task_id,
+                    task_id=metadata.get('task_id'),
                     task_run_result=data.get('result')
-                )
-
-            else:
-                # 1.2.2 Если 'task_id' отсутствует в метаданных это означает,
-                #       что это задача была запущена с помощью сервиса оркестрации
-                #       и все ее метаданные нужно только обновить
-                graph_run_dict = await handle_finished_task(
-                    graph_run_id=metadata.get('graphrun_id'),
-                    finished_task_run_id=metadata.get('taskrun_id'),
-                    task_run_result=data.get('result'),
-                    task_run_status=data.get('status')
                 )
 
             # 1.3 Результатом шага 1.2 является словарь вида
@@ -86,59 +88,85 @@ async def orchestration():
             # последовательного обновления и формирования новых задач в рамках этих графов
             graph_runs_dict.update(graph_run_dict)
 
+        # 2. По сформированным DAG (?) формируем и отправляем сообщения в соответствующие топики
         for graph_run_id, next_prev_task_runs_dict in graph_runs_dict.items():
+
             graph_run_failed_flag = False
             graph_run_finished_flag = True
+
             for next_task_run_id, prev_task_run_ids in next_prev_task_runs_dict.items():
-                next_task_run = await read_model_by_id(model=TaskRun, _id=next_task_run_id)
+                # 2.1 Определяем состояние GraphRun
+                next_task_run = await db_tools.read_model_by_id(
+                    model=db_models.TaskRun,
+                    _id=next_task_run_id
+                )
+
+                # Если следующий по графу TaskRun уже SUCCEED или FAILED, то
+                # пометь сам GraphRun как FAILED, если TaskRun FAILED и переходи к следующей
+                # части графа
                 if next_task_run.get('status_id') in (4, 5):
                     if next_task_run.get('status_id') == 5:
                         graph_run_failed_flag = True
                     continue
 
+                # Если хотя бы один из следующих по графу Taskrun'ов не оказался в
+                # одном из статусов SUCCEED или FAILED то GraphRun еще не считается
+                # завершенным
                 graph_run_finished_flag = False
+
                 prev_task_runs_success_flag = True
+
+                # Если один из предыдущих по графу TaskRun'ов оказался в статусе FAILED,
+                # то пометь следующий по графу TaskRun тоже как FAILED
                 for prev_task_run_id in prev_task_run_ids:
-                    task_run = await read_model_by_id(model=TaskRun, _id=prev_task_run_id)
+                    task_run = await db_tools.read_model_by_id(model=db_models.TaskRun, _id=prev_task_run_id)
                     if task_run.get('status_id') != 4:
                         if task_run.get('status_id') == 5:
-                            _ = await update_model_field_value(
-                                model=TaskRun,
+                            _ = await db_tools.update_model_field_value(
+                                model=db_models.TaskRun,
                                 _id=next_task_run_id,
                                 field='status_id',
                                 value=5
                             )
+                        # Если хотя бы один из предыдущих по графу TaskRun'ов не находится в
+                        # статусе SUCCEED, то новое сообщение формироваться не должно
                         prev_task_runs_success_flag = False
                         break
 
+                # 2.2 Если все предыдущие по графу TaskRun'ы находятся в статусе SUCCEED
+                # необходимо формировать и отправлять сообщение для следующего TaskRun
                 if prev_task_runs_success_flag:
+                    # 2.2.1 Формируем сообщение
                     service_name, message_for_service = await get_message_for_service(
                         graph_run_id, next_task_run_id, *prev_task_run_ids
                     )
 
+                    # 2.2.2 Отправляем сообщение
                     await queue_interface.send_message(
                         producer_id='default',
                         message=message_for_service,
                         topic_name=service_name  # TODO: Пока service_name == topic_name
                     )
 
-                    _ = await update_model_field_value(
-                        model=TaskRun,
+                    # 2.2.3 Обновляем значение параметров следующего TaskRun
+                    _ = await db_tools.update_model_field_value(
+                        model=db_models.TaskRun,
                         _id=next_task_run_id,
                         field='config',
                         value=message_for_service.get('config')
                     )
 
-                    _ = await update_model_field_value(
-                        model=TaskRun,
+                    _ = await db_tools.update_model_field_value(
+                        model=db_models.TaskRun,
                         _id=next_task_run_id,
                         field='status_id',
-                        value=1
+                        value=1  # TODO: status_id?
                     )
 
+            # Обновляем статус GraphRun, если это необходимо
             if graph_run_finished_flag:
-                _ = await update_model_field_value(
-                    model=GraphRun,
+                _ = await db_tools.update_model_field_value(
+                    model=db_models.GraphRun,
                     _id=graph_run_id,
                     field='status_id',
                     value=5 if graph_run_failed_flag else 4

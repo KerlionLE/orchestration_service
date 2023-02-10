@@ -34,8 +34,8 @@ def metabase_select_wrapper(read_one=False):
 
             query_result = await execute_query(async_session, select_query)
             if read_one:
-                return query_result.scalars().first() or None
-            return [item.to_dict() for item in query_result.scalars()] or None
+                return query_result.scalars().first()
+            return [item.to_dict() for item in query_result.scalars()]
 
         return wrapper
 
@@ -124,6 +124,11 @@ def update_model_by_id(model, _id, update_data):
 @metabase_update_wrapper
 def update_model_field_value(model, _id, field, value):
     return update(model).where(model.id == _id).values(**{field: value})
+
+
+@metabase_update_wrapper
+def update_model_by_id(model, _id, data):
+    return update(model).where(model.id == _id).values(**data)
 
 
 @metabase_delete_wrapper
