@@ -6,7 +6,7 @@ from ..metabase import utils as db_tools
 from ..metabase import models as db_models
 
 
-async def handle_newest_task(task_id, task_run_result):
+async def handle_newest_task(task_id, task_run_result, task_run_status):
     """
     Функция генерации нового GraphRun по task_id
     """
@@ -15,7 +15,7 @@ async def handle_newest_task(task_id, task_run_result):
 
     finished_tasks = {
         task_id: {
-            'status': 'SUCCEED',  # TODO: Убрать в константы или подумать еще...
+            'status': task_run_status,
             'result': task_run_result
         }
     }
@@ -33,7 +33,7 @@ async def handle_newest_task(task_id, task_run_result):
             model=db_models.GraphRun,
             filter_dict={
                 'graph_id': graph_id,
-                'status_id': 1  # TODO: status_id?
+                'status_id': db_tools.get_status_id('RUNNING')  # TODO: убрать в константы
             }
         )
 
@@ -61,7 +61,7 @@ async def handle_newest_task(task_id, task_run_result):
             )
 
             if not new_graph_run_flag:
-                # 2.1.2.1 Если не завершен, то
+                # 2.1.2.1 Если НЕ завершен, то
                 logger.info(f"FOUND RUNNING GRAPHRUN (graph_run_id={graph_run.get('id')}) "
                             f"WITH HANDLED TASK (task_id={task_id}). "
                             f"UPDATE TASKRUN STATUS...")
@@ -96,9 +96,14 @@ async def handle_newest_task(task_id, task_run_result):
             graph_runs_dict.update({graph_run_id: next_prev_task_runs_dict})
 
             # 2.2.2 Получаем список всех только что созданных TaskRun
-            task_run_list = await db_tools.read_models_by_filter(
+            graph_run_task_run_list = await db_tools.read_models_by_filter(
+                model=db_models.GraphRunTaskRun,
+                filter_dict={'graph_run_id': graph_run_id}
+            )
+
+            task_run_list = await db_tools.read_models_by_ids_list(
                 model=db_models.TaskRun,
-                filter_dict={'task_id': task_id} # TODO: Это ошибка!
+                ids_list=[data.get('task_run_id') for data in graph_run_task_run_list]
             )
 
             # 2.2.3 Формируем словарь вида {task_run_id: task_id}
@@ -120,11 +125,14 @@ async def handle_finished_task(graph_run_id, finished_task_run_id, task_run_resu
     Функция обновления состояний TaskRun существующего GraphRun
     """
 
-    # 1. Получаем объект TaskRun'a
-    task_run = await db_tools.read_model_by_id(
-        model=db_models.TaskRun,
-        _id=finished_task_run_id
+    # 1. Обновляем статус найденного task_run
+    _ = await orc_tools.update_task_run(
+        task_run_id=finished_task_run_id,
+        status=task_run_status,
+        result=task_run_result
     )
+
+    # ---------------------------------------------------------------
 
     # 2. Получаем список всех TaskRun в найденном GraphRun
     graph_run_task_run_list = await db_tools.read_models_by_filter(
@@ -139,14 +147,7 @@ async def handle_finished_task(graph_run_id, finished_task_run_id, task_run_resu
     # 3. Формируем словарь вида {task_run_id: task_id}
     task_runs_dict = await orc_tools.get_task_run_dict(task_run_list)
 
-    # 4. Обновляем статус найденного task_run
-    _ = await orc_tools.update_task_run(
-        task_run_id=finished_task_run_id,
-        status=task_run_status,
-        result=task_run_result
-    )
-
-    # 5. Получаем словарь связей следующих и предыдущих TaskRun
+    # 4. Получаем словарь связей следующих и предыдущих TaskRun
     next_prev_task_runs_dict = await get_graph(
         graph_run_id=graph_run_id, task_runs_dict=task_runs_dict
     )
@@ -191,7 +192,7 @@ async def create_new_graph(graph_id):
     graph_run_id = await db_tools.create_model(
         model=db_models.GraphRun, data={
             'graph_id': graph_id,
-            'status_id': 1,  # TODO: status_id?
+            'status_id': db_tools.get_status_id('RUNNING'),  # TODO: убрать в константы
             'config': dict(),
             'result': dict()
         }
@@ -294,5 +295,6 @@ async def get_message_for_service(graph_run_id, next_task_run_id, *previous_task
             "graph_name": graph.get('name')
         },
         "config": next_task_run_config,
-        "result": dict()
+        "result": dict(),
+        "status": "RUNNING"
     }

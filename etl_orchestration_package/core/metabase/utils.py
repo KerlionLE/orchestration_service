@@ -1,4 +1,5 @@
 import traceback
+from typing import Union
 
 from sqlalchemy.orm import Query
 
@@ -6,6 +7,7 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import models
 from . import get_metabase
 
 
@@ -27,7 +29,7 @@ async def execute_query(async_session: AsyncSession, query: Query) -> CursorResu
 
 def metabase_select_wrapper(read_one=False):
     def decorator(select_func):
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args, **kwargs) -> Union[dict, list]:
             async_session = await get_metabase().get_db().__anext__()
 
             select_query = select_func(*args, **kwargs)
@@ -139,3 +141,17 @@ def delete_model_by_id(model, _id):
 @metabase_insert_wrapper
 def create_model(model, data, exclude_fields=None):
     return get_metabase().insert(model, data, exclude_fields)
+
+
+# MODELS UTILS
+# -------------------------------------------------------------------------
+@metabase_select_wrapper(read_one=True)
+def get_status(status):
+    return select(models.TaskRunStatus).where(models.TaskRunStatus.status == status)
+
+
+async def get_status_id(status):
+    status_data = await get_status(status)
+    if status_data:
+        return status_data.get('id')
+    raise Exception('UNKNOWN STATUS!')

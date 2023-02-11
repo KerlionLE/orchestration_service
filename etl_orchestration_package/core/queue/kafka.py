@@ -75,3 +75,8 @@ class KafkaQueue(Queue):
 
         for consumer in consumers:
             await consumer.stop()
+
+    async def commit(self, consumer_id):
+        consumer = self.get_consumer(consumer_id)
+
+        await consumer.commit()

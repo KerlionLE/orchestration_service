@@ -23,8 +23,9 @@ async def check_for_new_graph_run(task_run_list, finished_task_ids):
 
     """
     for tr in task_run_list:
-        if tr.get('task_id') in finished_task_ids and tr.get('status_id') == 4:  # TODO: status_id?
-            return True
+        if tr.get('task_id') in finished_task_ids:
+            if tr.get('status_id') == db_tools.get_status_id('SUCCEED'):  # TODO: Убрать в константы
+                return True
     return False
 
 
@@ -64,14 +65,14 @@ async def create_task_runs(next_prev_tasks_dict):
     for n_task_id, p_task_ids in next_prev_tasks_dict.items():
         dct2[n_task_id] = {
             'task_id': n_task_id,
-            'status_id': 2,  # TODO: status_id?
+            'status_id': db_tools.get_status_id("CREATED"),  # TODO: убрать в константы
             'config': dict(),
             'result': dict()
         }
         for p_task_id in p_task_ids:
             dct2[p_task_id] = {
                 'task_id': p_task_id,
-                'status_id': 2,  # TODO: status_id?
+                'status_id': db_tools.get_status_id("CREATED"),  # TODO: убрать в константы
                 'config': dict(),
                 'result': dict()
             }

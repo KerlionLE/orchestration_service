@@ -5,7 +5,7 @@ from loguru import logger
 
 from .functions import handle_newest_task, handle_finished_task, get_message_for_service
 
-from ..metabase import get_metabase, add_metabase
+from ..metabase import add_metabase
 from ..queue import get_queue, add_queue
 
 from ..metabase import utils as db_tools
@@ -31,10 +31,8 @@ async def orchestration():
 
     logger.info('RUNNING INFINITE LOOP')
     while True:
-        # TODO: Маппинг статуса и status_id
         # TODO: Прикрутить GracefulKill (выход из бесконечного цикла)
-        # TODO: Прикрутить логи!!!!
-        # TODO: Нужно коммитить консьюмера!!!
+        # TODO: Нужно подумать над тем, как выполнять все операции в одну сессию/транзакцию БД
 
         graph_runs_dict = dict()
         # 1. Слушаем топик сообщений от сервисов
@@ -69,7 +67,8 @@ async def orchestration():
                 #       задачу в метабазе
                 graph_run_dict = await handle_newest_task(
                     task_id=metadata.get('task_id'),
-                    task_run_result=data.get('result')
+                    task_run_result=data.get('result'),
+                    task_run_status=data.get('status')
                 )
 
             # 1.3 Результатом шага 1.2 является словарь вида
@@ -94,6 +93,9 @@ async def orchestration():
 
         # 2. По сформированным DAG (?) формируем и отправляем сообщения в соответствующие топики
         for graph_run_id, next_prev_task_runs_dict in graph_runs_dict.items():
+            succeed_status_id = db_tools.get_status_id("SUCCEED")
+            failed_status_id = db_tools.get_status_id("FAILED")
+            running_status_id = db_tools.get_status_id('RUNNING')
 
             graph_run_failed_flag = False
             graph_run_finished_flag = True
@@ -108,8 +110,8 @@ async def orchestration():
                 # Если следующий по графу TaskRun уже SUCCEED или FAILED, то
                 # пометь сам GraphRun как FAILED, если TaskRun FAILED и переходи к следующей
                 # части графа
-                if next_task_run.get('status_id') in (4, 5):
-                    if next_task_run.get('status_id') == 5:
+                if next_task_run.get('status_id') in (succeed_status_id, failed_status_id):
+                    if next_task_run.get('status_id') == failed_status_id:
                         graph_run_failed_flag = True
                     continue
 
@@ -124,14 +126,14 @@ async def orchestration():
                 # то пометь следующий по графу TaskRun тоже как FAILED
                 for prev_task_run_id in prev_task_run_ids:
                     task_run = await db_tools.read_model_by_id(model=db_models.TaskRun, _id=prev_task_run_id)
-                    if task_run.get('status_id') != 4:
-                        if task_run.get('status_id') == 5:
-                            _ = await db_tools.update_model_field_value(
+                    if task_run.get('status_id') != succeed_status_id:
+                        if task_run.get('status_id') == failed_status_id:
+                            await db_tools.update_model_by_id(
                                 model=db_models.TaskRun,
                                 _id=next_task_run_id,
-                                field='status_id',
-                                value=5
+                                data={'status_id': failed_status_id}
                             )
+
                         # Если хотя бы один из предыдущих по графу TaskRun'ов не находится в
                         # статусе SUCCEED, то новое сообщение формироваться не должно
                         prev_task_runs_success_flag = False
@@ -153,29 +155,25 @@ async def orchestration():
                     )
 
                     # 2.2.3 Обновляем значение параметров следующего TaskRun
-                    _ = await db_tools.update_model_field_value(
+                    await db_tools.update_model_by_id(
                         model=db_models.TaskRun,
                         _id=next_task_run_id,
-                        field='config',
-                        value=message_for_service.get('config')
-                    )
-
-                    _ = await db_tools.update_model_field_value(
-                        model=db_models.TaskRun,
-                        _id=next_task_run_id,
-                        field='status_id',
-                        value=1  # TODO: status_id?
+                        data={
+                            'config': message_for_service.get('config'),
+                            'status_id': running_status_id
+                        }
                     )
 
             # Обновляем статус GraphRun, если это необходимо
             if graph_run_finished_flag:
-                _ = await db_tools.update_model_field_value(
+                await db_tools.update_model_by_id(
                     model=db_models.GraphRun,
                     _id=graph_run_id,
-                    field='status_id',
-                    value=5 if graph_run_failed_flag else 4
+                    data={
+                        'status_id': failed_status_id if graph_run_failed_flag else succeed_status_id
+                    }
                 )
 
-
+        queue_interface.commit(consumer_id='default')
 
     await queue_interface.stop()

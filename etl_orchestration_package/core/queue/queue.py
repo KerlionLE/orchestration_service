@@ -42,3 +42,6 @@ class Queue:
 
     def send_message(self, producer_id, message, **send_config):
         pass
+
+    def commit(self, consumer_id):
+        pass
