@@ -23,6 +23,9 @@ async def handle_newest_task(task_id, task_run_result):
     # 1. Получаем список всех graph_id, в которых фигурирует завершенный task
     graph_ids = await get_all_graph_id_by_task_id(task_id)
 
+    if not graph_ids:
+        logger.warning(f"UNKNOWN TASK! (task_id={task_id})")
+
     graph_runs_dict = dict()
     for graph_id in graph_ids:
         # 2. Проверяем существует ли GraphRun'ы с таким graph_id и статусом RUNNING
@@ -34,26 +37,12 @@ async def handle_newest_task(task_id, task_run_result):
             }
         )
 
-        # 2.1 Если таких НЕ существует, то создаем и инициализируем новый GraphRun:
-        if not running_graph_runs:
-            logger.info(f"CAN\'T FIND ANY RUNNING GRAPHRUNS WITH HANDLED TASK (task_id={task_id}). "
-                        f"CREATE NEW GRAPHRUN...")
-
-            graph_run_id, next_prev_task_runs_dict = await create_new_graph(graph_id)
-            graph_runs_dict.update({graph_run_id: next_prev_task_runs_dict})
-
-            # Тут Hint. Для того чтобы обновить статус таска,
-            # который пришел в сообщении, в SUCCEED мы добавляем созданный graph_run в список
-            # running_graph_runs
-            running_graph_runs.append({'id': graph_run_id})
-
-            logger.info(f"CREATED NEW GRAPHRUN (graph_run_id={graph_run_id}).")
-
-        # 2.2 Если существуют
-        # (это случай когда для запуска новой задачи (TaskRun) нужно дождаться N задач
-        # автоматически зарегистрированных в таблице TaskRun - [1, 2, ..., N] -> 3):
-        create_graph_run_flag = False
+        create_graph_run_flag = True
         for graph_run in running_graph_runs:
+            # 2.1 Если существуют
+            # (это случай когда для запуска новой задачи (TaskRun) нужно дождаться N задач
+            # автоматически зарегистрированных в таблице TaskRun - [1, 2, ..., N] -> 3):
+
             # 2.1.1 Получаем список всех TaskRun в найденном GraphRun
             graph_run_task_run_list = await db_tools.read_models_by_filter(
                 model=db_models.GraphRunTaskRun,
@@ -70,46 +59,58 @@ async def handle_newest_task(task_id, task_run_result):
                 task_run_list,
                 finished_task_ids=[_task_id for _task_id in finished_tasks]
             )
-            if new_graph_run_flag and not create_graph_run_flag:
-                logger.info(f"FOUND RUNNING GRAPHRUN (graph_run_id={graph_run.get('id')}) "
-                            f"WITH HANDLED TASK (task_id={task_id}). "
-                            f"TASKRUN WITH TASK_ID={task_id} IN THIS GRAPHRUN ALREADY FINISHED! "
-                            f"CREATE NEW GRAPHRUN...")
-
-                # 2.2.1 Если завершен, то создаем новый GraphRun
-                graph_run_id, next_prev_task_runs_dict = await create_new_graph(graph_id)
-                graph_runs_dict.update({graph_run_id: next_prev_task_runs_dict})
-
-                running_graph_runs.append({'id': graph_run_id})
-
-                logger.info(f"CREATED NEW GRAPHRUN (graph_run_id={graph_run_id}).")
-
-                # Для одного Graph нужно создать только 1 GraphRun
-                create_graph_run_flag = True
 
             if not new_graph_run_flag:
+                # 2.1.2.1 Если не завершен, то
                 logger.info(f"FOUND RUNNING GRAPHRUN (graph_run_id={graph_run.get('id')}) "
                             f"WITH HANDLED TASK (task_id={task_id}). "
                             f"UPDATE TASKRUN STATUS...")
 
-                # 2.2.1 Если не завершен, то
-                # 2.2.1.1 Формируем словарь вида {task_run_id: task_id}
+                # 2.1.2.2 Формируем словарь вида {task_run_id: task_id}
                 task_runs_dict = await orc_tools.get_task_run_dict(task_run_list)
 
-                # 2.2.1.2 Обновляем статус найденного task_run
+                # 2.1.2.3 Обновляем статус найденного task_run
                 _ = await orc_tools.update_task_runs(
                     task_run_dict=task_runs_dict,
                     tasks_data=finished_tasks
                 )
 
-                # 2.2.1.3 Получаем словарь связей следующих и предыдущих TaskRun
+                # 2.1.2.4 Получаем словарь связей следующих и предыдущих TaskRun
                 next_prev_task_runs_dict = await get_graph(
                     graph_run_id=graph_run.get('id'), task_runs_dict=task_runs_dict
                 )
 
                 graph_runs_dict.update({graph_run.get('id'): next_prev_task_runs_dict})
 
+                # Если хотя бы один из GraphRun нуждался в этом Task для продолжения работы
+                # новый GraphRun создавать не нужно
+                create_graph_run_flag = False
 
+        if create_graph_run_flag:
+            # 2.2 Если таких НЕ существует или все GraphRun завершены, то
+            logger.info(f"CAN\'T FIND ANY RUNNING GRAPHRUNS WITH QUEUED HANDLED TASK (task_id={task_id}). "
+                        f"CREATE NEW GRAPHRUN...")
+
+            # 2.2.1 Создаем новый GraphRun
+            graph_run_id, next_prev_task_runs_dict = await create_new_graph(graph_id)
+            graph_runs_dict.update({graph_run_id: next_prev_task_runs_dict})
+
+            # 2.2.2 Получаем список всех только что созданных TaskRun
+            task_run_list = await db_tools.read_models_by_filter(
+                model=db_models.TaskRun,
+                filter_dict={'task_id': task_id} # TODO: Это ошибка!
+            )
+
+            # 2.2.3 Формируем словарь вида {task_run_id: task_id}
+            task_runs_dict = await orc_tools.get_task_run_dict(task_run_list)
+
+            # 2.2.4 Обновляем статус завешенного task_run
+            _ = await orc_tools.update_task_runs(
+                task_run_dict=task_runs_dict,
+                tasks_data=finished_tasks
+            )
+
+            logger.info(f"CREATED NEW GRAPHRUN (graph_run_id={graph_run_id}).")
 
     return graph_runs_dict
 
@@ -139,14 +140,10 @@ async def handle_finished_task(graph_run_id, finished_task_run_id, task_run_resu
     task_runs_dict = await orc_tools.get_task_run_dict(task_run_list)
 
     # 4. Обновляем статус найденного task_run
-    _ = await orc_tools.update_task_runs(
-        task_run_dict=task_runs_dict,
-        tasks_data={
-            task_run.get('task_id'): {
-                'status_id': task_run_status,
-                'result': task_run_result
-            }
-        }
+    _ = await orc_tools.update_task_run(
+        task_run_id=finished_task_run_id,
+        status=task_run_status,
+        result=task_run_result
     )
 
     # 5. Получаем словарь связей следующих и предыдущих TaskRun
