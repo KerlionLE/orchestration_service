@@ -33,7 +33,7 @@ async def handle_newest_task(task_id, task_run_result, task_run_status):
             model=db_models.GraphRun,
             filter_dict={
                 'graph_id': graph_id,
-                'status_id': db_tools.get_status_id('RUNNING')  # TODO: убрать в константы
+                'status_id': await db_tools.get_status_id('RUNNING')  # TODO: убрать в константы
             }
         )
 
@@ -125,6 +125,9 @@ async def handle_finished_task(graph_run_id, finished_task_run_id, task_run_resu
     Функция обновления состояний TaskRun существующего GraphRun
     """
 
+    logger.info(f"START HANDLE FINISHED TASK_RUN WITH ID: {finished_task_run_id}")
+
+    logger.info(f"UPDATE TASKRUN (task_run_id={finished_task_run_id}) STATUS TO '{task_run_status}'...")
     # 1. Обновляем статус найденного task_run
     _ = await orc_tools.update_task_run(
         task_run_id=finished_task_run_id,
@@ -192,7 +195,7 @@ async def create_new_graph(graph_id):
     graph_run_id = await db_tools.create_model(
         model=db_models.GraphRun, data={
             'graph_id': graph_id,
-            'status_id': db_tools.get_status_id('RUNNING'),  # TODO: убрать в константы
+            'status_id': await db_tools.get_status_id('RUNNING'),  # TODO: убрать в константы
             'config': dict(),
             'result': dict()
         }
@@ -235,6 +238,8 @@ async def get_graph(graph_run=None, graph_run_id=None, task_runs_dict=None):
         graph_run = await db_tools.read_model_by_id(
             model=db_models.GraphRun, _id=graph_run_id
         )
+        if graph_run is None:
+            return dict()
 
     # 1. Получаем все Chain (из GraphChain) у которых graph = graph_id
     gc_list = await db_tools.read_models_by_filter(

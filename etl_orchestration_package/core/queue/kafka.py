@@ -22,8 +22,7 @@ class KafkaQueue(Queue):
         consumer = self.get_consumer(consumer_id)
 
         if not consumer:
-            # logger.error(f'Producer with producer_id {producer_id} does not exist!')
-            raise ValueError(f'Consumer with consumer_id {consumer_id} does not exist!')
+            logger.error(f'Producer with consumer_id {consumer_id} does not exist!')
 
         logger.info('TRY TO CONSUME DATA...')
         data = await consumer.getmany(timeout_ms=1000, max_records=10)  # TODO: Вынести в конфиг
@@ -42,8 +41,7 @@ class KafkaQueue(Queue):
         producer = self.get_producer(producer_id)
 
         if not producer:
-            # logger.error(f'Producer with producer_id {producer_id} does not exist!')
-            raise ValueError(f'Producer with producer_id {producer_id} does not exist!')
+            logger.error(f'Producer with producer_id {producer_id} does not exist!')
 
         json_message = json.dumps(message, default=str).encode('utf-8')
 

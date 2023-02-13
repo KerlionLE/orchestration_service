@@ -24,7 +24,8 @@ async def check_for_new_graph_run(task_run_list, finished_task_ids):
     """
     for tr in task_run_list:
         if tr.get('task_id') in finished_task_ids:
-            if tr.get('status_id') == db_tools.get_status_id('SUCCEED'):  # TODO: Убрать в константы
+            status_id = await db_tools.get_status_id('SUCCEED')  # TODO: Убрать в константы
+            if tr.get('status_id') == status_id:
                 return True
     return False
 
@@ -65,14 +66,14 @@ async def create_task_runs(next_prev_tasks_dict):
     for n_task_id, p_task_ids in next_prev_tasks_dict.items():
         dct2[n_task_id] = {
             'task_id': n_task_id,
-            'status_id': db_tools.get_status_id("CREATED"),  # TODO: убрать в константы
+            'status_id': await db_tools.get_status_id("CREATED"),  # TODO: убрать в константы
             'config': dict(),
             'result': dict()
         }
         for p_task_id in p_task_ids:
             dct2[p_task_id] = {
                 'task_id': p_task_id,
-                'status_id': db_tools.get_status_id("CREATED"),  # TODO: убрать в константы
+                'status_id': await db_tools.get_status_id("CREATED"),  # TODO: убрать в константы
                 'config': dict(),
                 'result': dict()
             }
@@ -90,13 +91,7 @@ async def update_task_run(task_run_id, status=None, result=None, config=None):
     data = {}
 
     if status is not None:
-        status_id = await db_tools.read_models_by_filter(
-            model=db_models.TaskRunStatus,
-            filter_dict={
-                'status': status
-            }
-        )
-        data.update({'status_id': status_id[0].get('id')})
+        data.update({'status_id': await db_tools.get_status_id(status)})
 
     if result is not None:
         data.update({'result': result})

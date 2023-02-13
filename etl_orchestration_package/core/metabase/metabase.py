@@ -49,6 +49,13 @@ class Metabase:
         factory = self.get_session_factory(**db_config)
         yield async_scoped_session(factory, scopefunc=current_task)
 
+    async def get_current_session(self):
+        current_session = self.sessions.get('current')
+        if current_session is None:
+            current_session = await self.get_db().__anext__()
+            self.sessions['current'] = current_session
+        return current_session
+
     def insert(self, *args, **kwargs):
         pass
 

@@ -7,36 +7,56 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from loguru import logger
+
 from . import models
 from . import get_metabase
 
 
 # ------------------------------------------------------------------------------------
 
-async def execute_query(async_session: AsyncSession, query: Query) -> CursorResult:
+async def execute_query(async_session: AsyncSession, query: Query, autocommit=False) -> CursorResult:
     result = await async_session.execute(query)
-    try:
-        await async_session.commit()
-    except Exception as e:
-        traceback.format_exc()
-        # await async_session.rollback()
-        raise e
+    if autocommit:
+        await commit(async_session)
 
     return result
 
 
 # ------------------------------------------------------------------------------------
 
+async def commit(async_session: AsyncSession = None):
+    if async_session is None:
+        async_session = await get_metabase().get_current_session()
+
+    try:
+        await async_session.commit()
+        logger.debug("ALL CHANGES SUCCESSFULLY COMMIT!!!")
+    except Exception as e:
+        traceback.format_exc()
+        raise e
+
+
+# ------------------------------------------------------------------------------------
+
+
 def metabase_select_wrapper(read_one=False):
     def decorator(select_func):
         async def wrapper(*args, **kwargs) -> Union[dict, list]:
-            async_session = await get_metabase().get_db().__anext__()
+            commit_flag = kwargs.pop('commit', False)
+            query = select_func(*args, **kwargs)
 
-            select_query = select_func(*args, **kwargs)
+            async_session = await get_metabase().get_current_session()
+            query_result = await execute_query(async_session, query, autocommit=commit_flag)
 
-            query_result = await execute_query(async_session, select_query)
             if read_one:
-                return query_result.scalars().first().to_dict()
+                result_data = query_result.scalars().first()
+                if result_data:
+                    return result_data.to_dict()
+
+                logger.warning(f"EMPTY RESULT FOR QUERY: \n'{query}', \nARGS: '{args}', \nKWARGS: '{kwargs}'")
+                return
+
             return [item.to_dict() for item in query_result.scalars()]
 
         return wrapper
@@ -48,11 +68,12 @@ def metabase_select_wrapper(read_one=False):
 
 def metabase_insert_wrapper(insert_function):
     async def wrapper(*args, **kwargs):
-        async_session = await get_metabase().get_db().__anext__()
+        commit_flag = kwargs.pop('commit', False)
+        query = insert_function(*args, **kwargs)
 
-        select_query = insert_function(*args, **kwargs)
+        async_session = await get_metabase().get_current_session()
+        query_result = await execute_query(async_session, query, autocommit=commit_flag)
 
-        query_result = await execute_query(async_session, select_query)
         inserted_id, *_ = query_result.inserted_primary_key
         return inserted_id
 
@@ -63,11 +84,11 @@ def metabase_insert_wrapper(insert_function):
 
 def metabase_update_wrapper(update_function):
     async def wrapper(*args, **kwargs):
-        async_session = await get_metabase().get_db().__anext__()
+        commit_flag = kwargs.pop('commit', False)
+        query = update_function(*args, **kwargs)
 
-        select_query = update_function(*args, **kwargs)
-
-        _ = await execute_query(async_session, select_query)
+        async_session = await get_metabase().get_current_session()
+        _ = await execute_query(async_session, query, autocommit=commit_flag)
 
         return
 
@@ -78,11 +99,11 @@ def metabase_update_wrapper(update_function):
 
 def metabase_delete_wrapper(delete_function):
     async def wrapper(*args, **kwargs):
-        async_session = await get_metabase().get_db().__anext__()
+        commit_flag = kwargs.pop('commit', False)
+        query = delete_function(*args, **kwargs)
 
-        select_query = delete_function(*args, **kwargs)
-
-        _ = await execute_query(async_session, select_query)
+        async_session = await get_metabase().get_current_session()
+        _ = await execute_query(async_session, query, autocommit=commit_flag)
 
         return
 
@@ -140,6 +161,7 @@ def delete_model_by_id(model, _id):
 
 @metabase_insert_wrapper
 def create_model(model, data, exclude_fields=None):
+    logger.debug(f"CREATE NEW '{model}' OBJECT!")
     return get_metabase().insert(model, data, exclude_fields)
 
 

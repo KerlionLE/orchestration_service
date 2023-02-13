@@ -5,11 +5,13 @@ from loguru import logger
 
 from .functions import handle_newest_task, handle_finished_task, get_message_for_service
 
-from ..metabase import add_metabase
+from ..metabase import get_metabase, add_metabase
 from ..queue import get_queue, add_queue
 
 from ..metabase import utils as db_tools
 from ..metabase import models as db_models
+
+from etl_orchestration_package.utils.killer import GracefulKiller
 
 
 def orchestration_process(metabase_interface=None, queue_interface=None):
@@ -26,14 +28,13 @@ def orchestration_process(metabase_interface=None, queue_interface=None):
 
 
 async def orchestration():
+    killer = GracefulKiller()
+
     queue_interface = get_queue()
     await queue_interface.start()
 
     logger.info('RUNNING INFINITE LOOP')
     while True:
-        # TODO: Прикрутить GracefulKill (выход из бесконечного цикла)
-        # TODO: Нужно подумать над тем, как выполнять все операции в одну сессию/транзакцию БД
-
         graph_runs_dict = dict()
         # 1. Слушаем топик сообщений от сервисов
         async for msg in queue_interface.consume_data('default'):
@@ -57,7 +58,7 @@ async def orchestration():
                     graph_run_id=metadata.get('graphrun_id'),
                     finished_task_run_id=finished_task_run_id,
                     task_run_result=data.get('result'),
-                    task_run_status=data.get('status')
+                    task_run_status=data.get('status', 'SUCCEED')  # TODO: Костыль для тестирования
                 )
 
             else:
@@ -68,7 +69,7 @@ async def orchestration():
                 graph_run_dict = await handle_newest_task(
                     task_id=metadata.get('task_id'),
                     task_run_result=data.get('result'),
-                    task_run_status=data.get('status')
+                    task_run_status=data.get('status', 'SUCCEED')  # TODO: Костыль для тестирования
                 )
 
             # 1.3 Результатом шага 1.2 является словарь вида
@@ -93,9 +94,9 @@ async def orchestration():
 
         # 2. По сформированным DAG (?) формируем и отправляем сообщения в соответствующие топики
         for graph_run_id, next_prev_task_runs_dict in graph_runs_dict.items():
-            succeed_status_id = db_tools.get_status_id("SUCCEED")
-            failed_status_id = db_tools.get_status_id("FAILED")
-            running_status_id = db_tools.get_status_id('RUNNING')
+            succeed_status_id = await db_tools.get_status_id("SUCCEED")
+            failed_status_id = await db_tools.get_status_id("FAILED")
+            running_status_id = await db_tools.get_status_id('RUNNING')
 
             graph_run_failed_flag = False
             graph_run_finished_flag = True
@@ -143,6 +144,7 @@ async def orchestration():
                 # необходимо формировать и отправлять сообщение для следующего TaskRun
                 if prev_task_runs_success_flag:
                     # 2.2.1 Формируем сообщение
+                    logger.info(f"CREATE NEW MESSAGE FOR TASK QUEUE...")
                     topic_name, message_for_service = await get_message_for_service(
                         graph_run_id, next_task_run_id, *prev_task_run_ids
                     )
@@ -155,6 +157,7 @@ async def orchestration():
                     )
 
                     # 2.2.3 Обновляем значение параметров следующего TaskRun
+                    logger.info(f"UPDATE TASKRUN (task_run_id={next_task_run_id}) STATUS TO 'RUNNING'...")
                     await db_tools.update_model_by_id(
                         model=db_models.TaskRun,
                         _id=next_task_run_id,
@@ -166,14 +169,26 @@ async def orchestration():
 
             # Обновляем статус GraphRun, если это необходимо
             if graph_run_finished_flag:
+                status = failed_status_id if graph_run_failed_flag else succeed_status_id
+                logger.info(f"UPDATE GRAPHRUN (graph_run_id={graph_run_id}) STATUS...")
                 await db_tools.update_model_by_id(
                     model=db_models.GraphRun,
                     _id=graph_run_id,
                     data={
-                        'status_id': failed_status_id if graph_run_failed_flag else succeed_status_id
+                        'status_id': status
                     }
                 )
 
-        queue_interface.commit(consumer_id='default')
+        if graph_runs_dict:
+            # Commit полученных из очереди сообщений
+            # await queue_interface.commit(consumer_id='default')
+
+            # Commit всех изменений в МетаБД
+            await db_tools.commit()
+
+            graph_runs_dict.clear()
+
+        if killer.kill_now:
+            break
 
     await queue_interface.stop()

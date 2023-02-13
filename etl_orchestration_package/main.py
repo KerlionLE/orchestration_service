@@ -1,7 +1,11 @@
+import os
+import sys
 from multiprocessing import Process
 
 import uvicorn
 from fastapi import FastAPI
+
+from loguru import logger
 
 from core.metabase import create_metabase
 from core.queue import create_queue
@@ -73,9 +77,17 @@ def startup_event():
 @app.on_event("shutdown")
 def shutdown_event():
     for _, process in PROCESS_DICT.items():
-        process.kill()
+        process.terminate()
 
 
 if __name__ == "__main__":
+    logger.level("INFO", color='<light-green>')
+    logger.configure(
+        handlers=[{
+            "sink": sys.stdout,
+            "format": "<lvl>{time} | {level: <8} | {message}</lvl>",
+            "colorize": True
+        }]
+    )
     # uvicorn.run(app, host="127.0.0.1", port=8000)
     orchestration_process(metabase_interface, queue_interface)

@@ -15,7 +15,7 @@ async def insert_data(sa_model: DeclarativeMeta, data: Union[BaseModel, Dict[str
     if isinstance(data, BaseModel):
         data = data.dict(exclude=set(exclude_fields))
 
-    return await db_tools.create_model(sa_model, data, exclude_fields)
+    return await db_tools.create_model(sa_model, data, exclude_fields, commit=True)
 
 
 @logger.catch(reraise=True)
@@ -35,9 +35,9 @@ async def update_data(sa_model: DeclarativeMeta, object_id: int, update_values: 
 
     upd_data = {k: v for k, v in update_values.items() if v is not None}
 
-    return await db_tools.update_model_by_id(sa_model, object_id, upd_data)
+    return await db_tools.update_model_by_id(sa_model, object_id, upd_data, commit=True)
 
 
 @logger.catch(reraise=True)
 async def delete_data(sa_model: DeclarativeMeta, object_id: int):
-    return await db_tools.delete_model_by_id(sa_model, object_id)
+    return await db_tools.delete_model_by_id(sa_model, object_id, commit=True)
