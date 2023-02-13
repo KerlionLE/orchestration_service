@@ -26,4 +26,10 @@ AUTO_OFFSET_RESET = os.getenv('AUTO_OFFSET_RESET', 'earliest')
 # ORCHESTRATION_CONFIG
 # ----------------------------------------------------------------------------
 
-DRY_RUN = os.getenv('DRY_RUN', True)
+DRY_RUN = os.getenv('DRY_RUN', False)
+
+# LOGGING_CONFIG
+# ----------------------------------------------------------------------------
+
+LOGGING_OUTPUT = os.getenv('LOGGING_OUTPUT')
+LOGGING_LEVEL = os.getenv('LOGGING_LEVEL', "DEBUG")

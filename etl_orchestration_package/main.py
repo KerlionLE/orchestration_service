@@ -1,5 +1,7 @@
+import sys
 from multiprocessing import Process
 
+from loguru import logger
 from fastapi import FastAPI
 
 from . import settings as config
@@ -17,6 +19,16 @@ PROCESS_DICT = {}
 
 @app.on_event("startup")
 def startup_event():
+    logger.level("INFO", color='<light-green>')
+    logger.configure(
+        handlers=[{
+            "sink": config.LOGGING_OUTPUT or sys.stdout,
+            "format": "<lvl>{time} | {level: <8} | {message}</lvl>",
+            "colorize": config.LOGGING_OUTPUT is None,
+            "level": config.LOGGING_LEVEL
+        }]
+    )
+
     create_metabase(
         metabase_id='default',
         metabase_type=config.DB_TYPE,

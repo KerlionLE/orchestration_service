@@ -24,11 +24,11 @@ class KafkaQueue(Queue):
         if not consumer:
             logger.error(f'Producer with consumer_id {consumer_id} does not exist!')
 
-        logger.info('TRY TO CONSUME DATA...')
+        logger.debug('TRY TO CONSUME DATA...')
         data = await consumer.getmany(timeout_ms=1000, max_records=10)  # TODO: Вынести в конфиг
 
         if not data:
-            logger.info('EMPTY QUEUE...')
+            logger.debug('EMPTY QUEUE...')
         else:
             logger.info('FOUND SOME MESSAGES!')
             logger.debug(f'DATA: {data}')
