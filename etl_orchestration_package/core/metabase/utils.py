@@ -75,6 +75,7 @@ def metabase_insert_wrapper(insert_function):
         query_result = await execute_query(async_session, query, autocommit=commit_flag)
 
         inserted_id, *_ = query_result.inserted_primary_key
+        logger.debug(f"NEW OBJECT ID - '{inserted_id}'")
         return inserted_id
 
     return wrapper

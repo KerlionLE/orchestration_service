@@ -14,7 +14,7 @@ from ..metabase import models as db_models
 from etl_orchestration_package.utils.killer import GracefulKiller
 
 
-def orchestration_process(metabase_interface=None, queue_interface=None):
+def orchestration_process(metabase_interface=None, queue_interface=None, **config):
     if metabase_interface is not None:
         add_metabase('default', metabase_interface)
 
@@ -23,11 +23,12 @@ def orchestration_process(metabase_interface=None, queue_interface=None):
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(orchestration())
+    loop.run_until_complete(orchestration(**config))
     loop.close()
 
 
-async def orchestration():
+async def orchestration(**config):
+
     killer = GracefulKiller()
 
     queue_interface = get_queue()
@@ -35,6 +36,9 @@ async def orchestration():
 
     logger.info('RUNNING INFINITE LOOP')
     while True:
+        if config.get('dry_run', False):
+            logger.warning("SERVICE WORKING IN DRY RUN MODE!!!")
+
         graph_runs_dict = dict()
         # 1. Слушаем топик сообщений от сервисов
         async for msg in queue_interface.consume_data('default'):
@@ -179,16 +183,18 @@ async def orchestration():
                     }
                 )
 
-        if graph_runs_dict:
+        if not config.get('dry_run', False) and graph_runs_dict:
             # Commit полученных из очереди сообщений
-            # await queue_interface.commit(consumer_id='default')
+            await queue_interface.commit(consumer_id='default')
 
             # Commit всех изменений в МетаБД
             await db_tools.commit()
 
-            graph_runs_dict.clear()
+        graph_runs_dict.clear()
 
         if killer.kill_now:
             break
 
     await queue_interface.stop()
+
+    logger.info(f"STOP!")

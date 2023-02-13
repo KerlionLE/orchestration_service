@@ -2,3 +2,5 @@
 .gitignore
 
 versions
+
+__main__.py

@@ -5,7 +5,10 @@ from pydantic import BaseModel
 
 from sqlalchemy.orm import DeclarativeMeta
 
-from etl_orchestration_package.core.metabase import utils as db_tools
+try:
+    from etl_orchestration_package.core.metabase import utils as db_tools
+except ModuleNotFoundError:
+    from ..core.metabase import utils as db_tools
 
 
 @logger.catch(reraise=True)
