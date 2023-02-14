@@ -121,3 +121,13 @@ graph_run_id task_run_id
 4 -> 6
 
 {"metadata": {"task_id": 1}, "config": {}, "result": {}}
+
+---
+
+{"metadata": {"graphrun_id": 221, "taskrun_id": 1063, "process_uid": "TEST_DAG", "service_name": "airflow", "graph_name": "TEST"}, "config": {}, "result": {}, "status": "SUCCEED"}
+
+{"metadata": {"task_id": 1063}, "config": {}, "result": {}, "status": "SUCCEED"}
+
+uvicorn etl_orchestration_package.main:app --host 0.0.0.0 --port 8000
+
+cd etl_orchestration_package/ && alembic ...
