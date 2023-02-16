@@ -55,7 +55,7 @@ def metabase_select_wrapper(read_one=False):
                     return result_data.to_dict()
 
                 logger.warning(f"EMPTY RESULT FOR QUERY: \n'{query}', \nARGS: '{args}', \nKWARGS: '{kwargs}'")
-                return
+                return Union[dict(), list()]
 
             return [item.to_dict() for item in query_result.scalars()]
 

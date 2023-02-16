@@ -37,7 +37,8 @@ async def create_task(task_info: api_models.TaskInfo) -> api_models.CreatedObjec
 
 
 @crud_router.post('/task-run-statuses', status_code=201)
-async def create_task_run_status(task_run_status_info: api_models.TaskRunStatusInfo) -> api_models.CreatedObjectResponse:
+async def create_task_run_status(
+        task_run_status_info: api_models.TaskRunStatusInfo) -> api_models.CreatedObjectResponse:
     task_run_status_id = await api_tools.insert_data(db_models.TaskRunStatus, task_run_status_info)
 
     return api_models.CreatedObjectResponse(object_id=task_run_status_id)
