@@ -42,7 +42,8 @@ variables:
     - sed -i s/__DB_HOST__/$DB_HOST/g k8s_manifests/secret.yaml
     - sed -i s/__DB_PORT__/$DB_PORT/g k8s_manifests/secret.yaml
     - sed -i s/__BOOTSTRAP_SERVERS__/$BOOTSTRAP_SERVERS/g k8s_manifests/secret.yaml
-    - sed -i s/__KAFKA_TOPIC__/$KAFKA_TOPIC/g k8s_manifests/secret.yaml
+    - sed -i s/__KAFKA_TOPIC_ETL__/$KAFKA_TOPIC_ETL/g k8s_manifests/secret.yaml
+    - sed -i s/__KAFKA_TOPIC_AF__/$KAFKA_TOPIC_AF/g k8s_manifests/secret.yaml
 
     # INGRESS VARIABLES RENDERING
     - sed -i s/__K8S_URL__/$K8S_URL/g k8s_manifests/ingress.yaml
@@ -65,8 +66,9 @@ variables:
     DB_PASSWORD: $DEV_DB_PASSWORD
     DB_HOST: $DEV_DB_HOST
     DB_PORT: $DEV_DB_PORT
-    BOOTSTRAP_SERVERS: $BOOTSTRAP_SERVERS
-    KAFKA_TOPIC: $KAFKA_TOPIC
+    BOOTSTRAP_SERVERS: $DEV_BOOTSTRAP_SERVERS
+    KAFKA_TOPIC_ETL: $KAFKA_TOPIC_ETL
+    KAFKA_TOPIC_AF: $KAFKA_TOPIC_AF
     K8S_URL: ukd-orchestration.k8s.dev002.local
   script:
     - kubectl apply -f k8s_manifests/secret.yaml
