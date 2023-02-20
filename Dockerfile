@@ -23,7 +23,7 @@ index-url = ${PYPI_INDEX_URL}" \
 
 RUN mkdir -p /opt/ukd_orc_service/src
 
-COPY requirements.txt /opt/ukd_orc_service/requirements.txt
+COPY etl_orchestration_package/requirements.txt /opt/ukd_orc_service/requirements.txt
 RUN pip3 install -r /opt/ukd_orc_service/requirements.txt
 
 COPY etl_orchestration_package /opt/ukd_orc_service/src
@@ -33,6 +33,6 @@ EXPOSE 9085
 USER root
 WORKDIR /opt/ukd_orc_service
 
-COPY scripts/entrypoint.sh /usr/local/entrypoint.sh
+COPY etl_orchestration_package/scripts/entrypoint.sh /usr/local/entrypoint.sh
 RUN ["chmod", "+x", "/usr/local/entrypoint.sh"]
 ENTRYPOINT ["/usr/local/entrypoint.sh"]

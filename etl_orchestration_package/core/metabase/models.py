@@ -1,11 +1,8 @@
 import os
 
-from datetime import datetime
-
-from sqlalchemy.ext.declarative import declarative_base
-
 from sqlalchemy import Column, ForeignKey, text
-from sqlalchemy.dialects.postgresql import BIGINT, TIMESTAMP, VARCHAR, SMALLINT, DATE, JSONB
+from sqlalchemy.dialects.postgresql import BIGINT, TIMESTAMP, VARCHAR, SMALLINT, JSONB
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, validates
 
 Base = declarative_base()

@@ -8,10 +8,10 @@ from sqlalchemy.ext.asyncio import create_async_engine
 parent_dir = os.path.abspath(os.path.join(os.getcwd()))
 sys.path.append(parent_dir)
 
-from core.metabase import create_metabase, get_metabase
-from core.metabase.models import Base
+from etl_orchestration_package.core.metabase import create_metabase, get_metabase
+from etl_orchestration_package.core.metabase.models import Base
 
-from settings import DB_TYPE, DB_NAME, DB_HOST, DB_PORT, DB_USER, DB_PASSWORD
+from etl_orchestration_package.settings import DB_TYPE, DB_NAME, DB_HOST, DB_PORT, DB_USER, DB_PASSWORD
 
 create_metabase(
     metabase_id='default',

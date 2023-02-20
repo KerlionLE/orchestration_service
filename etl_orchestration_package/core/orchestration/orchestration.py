@@ -1,17 +1,14 @@
-import json
 import asyncio
+import json
 
 from loguru import logger
 
-from .functions import handle_newest_task, handle_finished_task, get_message_for_service
-
-from ..metabase import get_metabase, add_metabase
-from ..queue import get_queue, add_queue
-
-from ..metabase import utils as db_tools
-from ..metabase import models as db_models
-
 from etl_orchestration_package.utils.killer import GracefulKiller
+from .functions import handle_newest_task, handle_finished_task, get_message_for_service
+from ..metabase import add_metabase
+from ..metabase import models as db_models
+from ..metabase import utils as db_tools
+from ..queue import get_queue, add_queue
 
 
 def orchestration_process(metabase_interface=None, queue_interface=None, **config):
