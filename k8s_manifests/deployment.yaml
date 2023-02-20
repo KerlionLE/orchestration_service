@@ -53,16 +53,16 @@ spec:
                 secretKeyRef:
                   name: ukd-orchestration-secret
                   key: kfk_servers
-            - name: KAFKA_TOPIC_FIN
+            - name: KAFKA_TOPIC_ETL
               valueFrom:
                 secretKeyRef:
                   name: ukd-orchestration-secret
-                  key: kfk_topic_fin
-            - name: KAFKA_TOPIC_START
+                  key: kfk_topic_etl
+            - name: KAFKA_TOPIC_AF
                 valueFrom:
                   secretKeyRef:
                     name: ukd-orchestration-secret
-                    key: kfk_topic_start
+                    key: kfk_topic_af
           resources:
             requests:
               cpu: "250m"
