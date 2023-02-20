@@ -1,0 +1,75 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ukd-orchestration
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      app: ukd-orchestration
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: ukd-orchestration
+    spec:
+      containers:
+        - image: __DOCKER_REGISTRY__/__REGISTRY_REPO__/__IMAGE_NAME__:__IMAGE_VERSION__
+          name: ukd-orchestration
+          ports:
+            - containerPort: 9085
+              name: http
+          env:
+            - name: PG_DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: ukd-orchestration-secret
+                  key: db_name
+            - name: PG_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ukd-orchestration-secret
+                  key: db_username
+            - name: PG_DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: ukd-orchestration-secret
+                  key: db_password
+            - name: PG_DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: ukd-orchestration-secret
+                  key: db_host
+            - name: PG_DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: ukd-orchestration-secret
+                  key: db_port
+            - name: KAFKA_SERVERS
+              valueFrom:
+                secretKeyRef:
+                  name: ukd-orchestration-secret
+                  key: kfk_servers
+            - name: KAFKA_TOPIC_FIN
+              valueFrom:
+                secretKeyRef:
+                  name: ukd-orchestration-secret
+                  key: kfk_topic_fin
+            - name: KAFKA_TOPIC_START
+                valueFrom:
+                  secretKeyRef:
+                    name: ukd-orchestration-secret
+                    key: kfk_topic_start
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 256Mi
+            limits:
+              cpu: "250m"
+              memory: 256Mi
+
+      securityContext:
+        fsGroup: 1000

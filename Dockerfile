@@ -33,6 +33,6 @@ EXPOSE 9085
 USER root
 WORKDIR /opt/ukd_orc_service
 
-COPY etl_orchestration_package/scripts/entrypoint.sh /usr/local/entrypoint.sh
+COPY scripts/entrypoint.sh /usr/local/entrypoint.sh
 RUN ["chmod", "+x", "/usr/local/entrypoint.sh"]
 ENTRYPOINT ["/usr/local/entrypoint.sh"]

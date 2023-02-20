@@ -1,0 +1,83 @@
+include:
+  - project: 'devops/svd/ci-templates'
+    ref: 3.0.2
+    file: '/full_ci.yml'
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+variables:
+  REGISTRY_LOGIN: $ARTIFACTORY_LOGIN
+  REGISTRY_PASSWORD: $ARTIFACTORY_PASSWORD
+  REGISTRY_DEV_REPO: ukd-dwh-integration-docker-dev
+  REGISTRY_RC_REPO: ukd-dwh-integration-docker-rc
+  PROJECT_NAME: ukd_orchestration_service
+  ARTIFACT_TYPE: docker
+  KUBECONFIG: /etc/deploy/config
+
+  DOCKER_REGISTRY: repo.dev002.local
+  DOCKER_BUILD_ARGS: \
+     PYPI_INDEX_URL=https://repo.dev002.local/artifactory/api/pypi/pypi-dev/simple \
+     PYPI_EXTRA_INDEX_URL=https://$ARTIFACTORY_LOGIN:$ARTIFACTORY_PASSWORD@repo.dev002.local/artifactory/api/pypi/ukd-dwh-integration-pypi-dev/simple \
+     REPO_HOST=repo.dev002.local
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+.render_scripts:
+  before_script:
+    - mkdir -p /etc/deploy
+    - echo ${KUBE_CONFIG_DATA} | base64 -d > ${KUBECONFIG}
+    - kubectl config use-context ${CONTEXT_NAME}
+
+    # DEPLOYMENT VARIABLES RENDERING
+    - sed -i s/__DOCKER_REGISTRY__/$DOCKER_REGISTRY/g k8s_manifests/deployment.yaml
+    - sed -i s/__REGISTRY_REPO__/$REGISTRY_REPO/g k8s_manifests/deployment.yaml
+    - sed -i s/__IMAGE_NAME__/$PROJECT_NAME/g k8s_manifests/deployment.yaml
+    - sed -i s/__IMAGE_VERSION__/$IMAGE_VERSION/g k8s_manifests/deployment.yaml
+
+    # SECRET VARIABLES RENDERING
+    - sed -i s/__DB_NAME__/$DB_NAME/g k8s_manifests/secret.yaml
+    - sed -i s/__DB_USERNAME__/$DB_USERNAME/g k8s_manifests/secret.yaml
+    - sed -i s/__DB_PASSWORD__/$DB_PASSWORD/g k8s_manifests/secret.yaml
+    - sed -i s/__DB_HOST__/$DB_HOST/g k8s_manifests/secret.yaml
+    - sed -i s/__DB_PORT__/$DB_PORT/g k8s_manifests/secret.yaml
+    - sed -i s/__BOOTSTRAP_SERVERS__/$BOOTSTRAP_SERVERS/g k8s_manifests/secret.yaml
+    - sed -i s/__KAFKA_TOPIC__/$KAFKA_TOPIC/g k8s_manifests/secret.yaml
+
+    # INGRESS VARIABLES RENDERING
+    - sed -i s/__K8S_URL__/$K8S_URL/g k8s_manifests/ingress.yaml
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+"Deploy DEV":
+  stage: deploy-dev
+  image: repo.dev002.local/docker/centos7_kubectl_helm_mailx_netcat:0.1.2
+  tags:
+    - docker_fct_dev
+  only:
+    - dev
+  variables:
+    CONTEXT_NAME: ukd-platform-develop@cluster.local
+    KUBE_CONFIG_DATA: $DEV_KUBE_CONFIG_DATA
+    IMAGE_NAME: $DOCKER_REGISTRY/$REGISTRY_DEV_REPO/$PROJECT_NAME
+    REGISTRY_REPO: $REGISTRY_DEV_REPO
+    DB_NAME: $DEV_DB_NAME
+    DB_USERNAME: $DEV_DB_USERNAME
+    DB_PASSWORD: $DEV_DB_PASSWORD
+    DB_HOST: $DEV_DB_HOST
+    DB_PORT: $DEV_DB_PORT
+    BOOTSTRAP_SERVERS: $BOOTSTRAP_SERVERS
+    KAFKA_TOPIC: $KAFKA_TOPIC
+    K8S_URL: ukd-orchestration.k8s.dev002.local
+  script:
+    - kubectl apply -f k8s_manifests/secret.yaml
+    - kubectl apply -f k8s_manifests/service.yaml
+    - kubectl apply -f k8s_manifests/ingress.yaml
+
+    - kubectl delete deploy ukd-orchestration --ignore-not-found=true
+    - kubectl apply -f k8s_manifests/deployment.yaml
+  extends:
+    - .render_scripts
+
+# ----------------------------------------------------------------------------------------------------------------------
+
