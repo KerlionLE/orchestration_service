@@ -54,8 +54,7 @@ variables:
   image: repo.dev002.local/docker/centos7_kubectl_helm_mailx_netcat:0.1.2
   tags:
     - docker_fct_dev
-  only:
-    - dev
+  when: manual
   variables:
     CONTEXT_NAME: ukd-platform-develop@cluster.local
     KUBE_CONFIG_DATA: $DEV_KUBE_CONFIG_DATA
