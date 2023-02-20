@@ -1,0 +1,14 @@
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: ukd-orchestration-ingress
+  namespace: ukd-platform
+spec:
+  rules:
+    - host: __K8S_URL__
+      http:
+        paths:
+        - path: /
+          backend:
+            serviceName: ukd-dml-logging-service
+            servicePort: 80
