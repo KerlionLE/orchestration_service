@@ -27,6 +27,7 @@ COPY etl_orchestration_package/requirements.txt /opt/ukd_orc_service/requirement
 RUN pip3 install -r /opt/ukd_orc_service/requirements.txt
 
 COPY etl_orchestration_package /opt/ukd_orc_service/src
+RUN pip3 install /opt/ukd_orc_service/src/etl_orchestration_package
 
 EXPOSE 9085
 
