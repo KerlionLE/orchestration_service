@@ -22,12 +22,12 @@ echo "[easy_install] \n\
 index-url = ${PYPI_INDEX_URL}" \
 >> /root/.pydistutils.cfg
 
-RUN mkdir -p ${WORK_DIR}
+RUN mkdir -p ${WORK_DIR}/src
 
 COPY etl_orchestration_package/requirements.txt ${WORK_DIR}/requirements.txt
 RUN pip3 install -r ${WORK_DIR}/requirements.txt
 
-COPY etl_orchestration_package /opt/ukd_orc_service/src
+COPY etl_orchestration_package ${WORK_DIR}/src
 
 EXPOSE 9085
 
