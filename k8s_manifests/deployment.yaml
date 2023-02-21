@@ -58,11 +58,8 @@ spec:
                 secretKeyRef:
                   name: ukd-orchestration-secret
                   key: kfk_topic_etl
-            - name: KAFKA_TOPIC_AF
-              valueFrom:
-                secretKeyRef:
-                  name: ukd-orchestration-secret
-                  key: kfk_topic_af
+            - name: DRY_RUN
+              value: True
           resources:
             requests:
               cpu: "250m"
