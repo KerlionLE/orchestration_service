@@ -3,7 +3,7 @@ import json
 
 from loguru import logger
 
-from etl_orchestration_package.utils.killer import GracefulKiller
+from ...utils.killer import GracefulKiller
 from .functions import handle_newest_task, handle_finished_task, get_message_for_service
 from ..metabase import add_metabase
 from ..metabase import models as db_models

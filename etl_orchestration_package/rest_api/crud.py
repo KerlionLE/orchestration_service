@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 from . import utils as api_tools
 from . import models as api_models
 
-from etl_orchestration_package.core.metabase import models as db_models
+from ..core.metabase import models as db_models
 
 crud_router = APIRouter(prefix="/api/v1")
 

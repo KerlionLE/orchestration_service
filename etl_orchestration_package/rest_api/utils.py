@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import DeclarativeMeta
 
 try:
-    from etl_orchestration_package.core.metabase import utils as db_tools
+    from ..core.metabase import utils as db_tools
 except ModuleNotFoundError:
     from ..core.metabase import utils as db_tools
 
