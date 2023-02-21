@@ -6,6 +6,7 @@ RUN mkdir -p /root/.pip/
 ARG PYPI_INDEX_URL
 ARG REPO_HOST
 ARG PYPI_EXTRA_INDEX_URL
+ENV WORK_DIR='/opt/ukd_orc_service'
 
 # USE --build-arg PYPI_INDEX_URL=... --build-arg REPO_HOST=...
 RUN rm -rf /root/.pip/pip.conf && \
@@ -21,19 +22,19 @@ echo "[easy_install] \n\
 index-url = ${PYPI_INDEX_URL}" \
 >> /root/.pydistutils.cfg
 
-RUN mkdir -p /opt/ukd_orc_service/src
+RUN mkdir -p ${WORK_DIR}
 
-COPY etl_orchestration_package/requirements.txt /opt/ukd_orc_service/requirements.txt
-RUN pip3 install -r /opt/ukd_orc_service/requirements.txt
+COPY etl_orchestration_package/requirements.txt ${WORK_DIR}/requirements.txt
+RUN pip3 install -r ${WORK_DIR}/requirements.txt
 
 COPY etl_orchestration_package /opt/ukd_orc_service/src
-RUN pip3 install /opt/ukd_orc_service/src/etl_orchestration_package
 
 EXPOSE 9085
 
 USER root
-WORKDIR /opt/ukd_orc_service
+WORKDIR ${WORK_DIR}
 
 COPY scripts/entrypoint.sh /usr/local/entrypoint.sh
+RUN cd ${WORK_DIR}
 RUN ["chmod", "+x", "/usr/local/entrypoint.sh"]
 ENTRYPOINT ["/usr/local/entrypoint.sh"]
