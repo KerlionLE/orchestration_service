@@ -59,7 +59,7 @@ spec:
                   name: ukd-orchestration-secret
                   key: kfk_topic_etl
             - name: DRY_RUN
-              value: True
+              value: 1
           resources:
             requests:
               cpu: "250m"
